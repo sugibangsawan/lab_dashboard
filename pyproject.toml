@@ -1,13 +1,17 @@
 [project]
 name = "lab-dashboard"
 version = "0.1.0"
-description = "Add your description here"
+description = "Lab water-quality dashboard for Unit D ponds"
 readme = "README.md"
 authors = [
     { name = "sugiharto", email = "sugihartobangsawan@gmail.com" }
 ]
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "pandas>=2.2",
+    "plotly>=6.0",
+    "streamlit>=1.40",
+]
 
 [project.scripts]
 lab-dashboard = "lab_dashboard:main"

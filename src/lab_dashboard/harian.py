@@ -1,36 +1,27 @@
-"""Simple Streamlit dashboard for Lab Lengkap Unit D ponds."""
+"""Harian dashboard for Unit D ponds from sheet harian [D]."""
 
 from __future__ import annotations
 
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(
-    page_title="Unit D Dashboard",
-    page_icon=":material/water_drop:",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
-
-from lab_dashboard.data import load_lab_data, latest_row, ponds_in_data
-from lab_dashboard.harian import page as harian_page
+from lab_dashboard.data import latest_row, load_harian_data, ponds_in_data
 from lab_dashboard.ui import apply_style, comparison_chart, fmt, kpi_card, line_chart, status_badge
 
 KPI_GROUPS = [
-    ("Air", [("pH Pagi", "pH pagi"), ("pH Sore", "pH sore"), ("Salinitas", "ppt"), ("Alkalinitas", "ppm")]),
-    ("TOM", [("TOM", "ppm")]),
-    ("Nutrien", [("NH4", "ppm"), ("NH3", "ppm"), ("NO2", "ppm"), ("PO4", "ppm")]),
-    ("Bakteri", [("Vibrio Hijau", "CFU"), ("Vibrio Kuning", "CFU"), ("Swanella", "CFU"), ("Vibrio Total", "CFU")]),
+    ("Pakan", [("Pakan Harian", "kg")]),
+    ("pH", [("pH Pagi", "pH"), ("pH Sore", "pH"), ("Diff pH", "Δ")]),
+    ("Kecerahan", [("Kecerahan Pagi", "cm"), ("Kecerahan Sore", "cm"), ("Diff Kecerahan", "cm")]),
 ]
 
 
-@st.cache_data(ttl=120, show_spinner="Mengambil data dari Google Sheet...")
+@st.cache_data(ttl=120, show_spinner="Mengambil data harian (pH & kecerahan)...")
 def _cached_data() -> pd.DataFrame:
-    return load_lab_data()
+    return load_harian_data()
 
 
 def render_overview(frame: pd.DataFrame, ponds: list[str]) -> None:
-    st.subheader("Ringkasan kolam")
+    st.subheader("Profil kolam")
     cards = st.columns(len(ponds))
     for column, pond in zip(cards, ponds, strict=True):
         row = latest_row(frame, pond)
@@ -42,20 +33,27 @@ def render_overview(frame: pd.DataFrame, ponds: list[str]) -> None:
             st.markdown(f"**{pond}**")
             st.caption(f"{date} · DOC {fmt(row.get('DOC'), 0)}")
             st.markdown(
-                f"pH {fmt(row.get('pH Pagi'))} / {fmt(row.get('pH Sore'))}<br>"
-                f"Alk {fmt(row.get('Alkalinitas'))} · NH₃ {fmt(row.get('NH3'), 3)}<br>"
-                f"Vibrio {fmt(row.get('Vibrio Total'), 0)} {status_badge('Vibrio Total', row.get('Vibrio Total'))}",
+                f"Pakan {fmt(row.get('Pakan Harian'), 0)} kg<br>"
+                f"pH {fmt(row.get('pH Pagi'))} / {fmt(row.get('pH Sore'))} "
+                f"(Δ {fmt(row.get('Diff pH'))})<br>"
+                f"Kecerahan {fmt(row.get('Kecerahan Pagi'), 0)} / "
+                f"{fmt(row.get('Kecerahan Sore'), 0)} cm "
+                f"(Δ {fmt(row.get('Diff Kecerahan'), 0)}) "
+                f"{status_badge('Kecerahan Pagi', row.get('Kecerahan Pagi'))}",
                 unsafe_allow_html=True,
             )
 
     st.subheader("Perbandingan antar kolam")
     left, right = st.columns(2)
     with left:
-        st.plotly_chart(comparison_chart(frame, "NH4", ponds), width="stretch")
-        st.plotly_chart(comparison_chart(frame, "Vibrio Hijau", ponds), width="stretch")
+        st.plotly_chart(comparison_chart(frame, "Pakan Harian", ponds), width="stretch")
+        st.plotly_chart(comparison_chart(frame, "pH Pagi", ponds), width="stretch")
+        st.plotly_chart(comparison_chart(frame, "Kecerahan Pagi", ponds), width="stretch")
+        st.plotly_chart(comparison_chart(frame, "Diff pH", ponds), width="stretch")
     with right:
-        st.plotly_chart(comparison_chart(frame, "NO2", ponds), width="stretch")
-        st.plotly_chart(comparison_chart(frame, "Vibrio Kuning", ponds), width="stretch")
+        st.plotly_chart(comparison_chart(frame, "pH Sore", ponds), width="stretch")
+        st.plotly_chart(comparison_chart(frame, "Kecerahan Sore", ponds), width="stretch")
+        st.plotly_chart(comparison_chart(frame, "Diff Kecerahan", ponds), width="stretch")
 
 
 def render_pond(frame: pd.DataFrame, pond: str) -> None:
@@ -66,11 +64,11 @@ def render_pond(frame: pd.DataFrame, pond: str) -> None:
 
     latest = subset.iloc[-1]
     first = subset.iloc[0]
-    st.subheader(f"Kolam {pond}")
+    st.subheader(f"Profil kolam {pond}")
     info = st.columns(4)
     info[0].metric("Tanggal terakhir", latest["Tanggal"].strftime("%d %b %Y"))
     info[1].metric("DOC", fmt(latest.get("DOC"), 0))
-    info[2].metric("Sampel", str(len(subset)))
+    info[2].metric("Hari tercatat", str(len(subset)))
     info[3].metric(
         "Periode",
         f"{first['Tanggal'].strftime('%d %b')} – {latest['Tanggal'].strftime('%d %b')}",
@@ -87,52 +85,54 @@ def render_pond(frame: pd.DataFrame, pond: str) -> None:
     c1, c2 = st.columns(2)
     with c1:
         st.plotly_chart(
+            line_chart(subset, ["Pakan Harian"], "Pakan harian", "kg"),
+            width="stretch",
+        )
+        st.plotly_chart(
             line_chart(subset, ["pH Pagi", "pH Sore"], "pH pagi & sore", "pH"),
             width="stretch",
         )
         st.plotly_chart(
-            line_chart(subset, ["Salinitas"], "Salinitas", "ppt"),
-            width="stretch",
-        )
-        st.plotly_chart(
-            line_chart(subset, ["TOM"], "TOM", "ppm"),
+            line_chart(subset, ["Diff pH"], "Diff pH (sore − pagi)", "Δ pH"),
             width="stretch",
         )
     with c2:
         st.plotly_chart(
-            line_chart(subset, ["NH4", "NH3", "NO2", "PO4"], "NH4, NH3, NO2, PO4", "ppm"),
+            line_chart(
+                subset,
+                ["Kecerahan Pagi", "Kecerahan Sore"],
+                "Kecerahan pagi & sore",
+                "cm",
+            ),
             width="stretch",
         )
         st.plotly_chart(
             line_chart(
                 subset,
-                ["Vibrio Hijau", "Vibrio Kuning", "Swanella", "Vibrio Total"],
-                "Vibrio",
-                "CFU",
+                ["Diff Kecerahan"],
+                "Diff kecerahan (sore − pagi)",
+                "cm",
             ),
             width="stretch",
         )
 
-    table = subset.drop(columns=["Kolam"]).copy()
+    table = subset.copy()
     table["Tanggal"] = table["Tanggal"].dt.strftime("%d %b %Y")
     display_cols = ["Tanggal", "DOC"] + [
-        col
-        for _, metrics in KPI_GROUPS
-        for col, _ in metrics
-        if col in table.columns
+        col for _, metrics in KPI_GROUPS for col, _ in metrics if col in table.columns
     ]
-    st.subheader("Riwayat lab")
+    st.subheader("Riwayat harian")
     st.dataframe(table[display_cols], hide_index=True, width="stretch")
 
 
 def page() -> None:
     apply_style()
-    st.title("Lab Data Lengkap Unit D")
-    st.caption("Data live dari sheet **lengkap [D]** · Lab Lengkap Unit D Periode Tebar Juni 2026")
+    st.title("Lab Harian Unit D")
+    st.caption("Data live dari sheet **harian [D]** · Pakan, pH, dan kecerahan per kolam")
 
     sidebar = st.sidebar
     sidebar.header("Kolam")
-    if sidebar.button("Muat ulang data", width="stretch", key="reload_lab"):
+    if sidebar.button("Muat ulang data", width="stretch", key="reload_harian"):
         _cached_data.clear()
 
     try:
@@ -148,30 +148,9 @@ def page() -> None:
     sidebar.caption(f"{len(frame)} baris · {len(growout)} kolam budidaya")
 
     pages = ["Ringkasan"] + ponds
-    page_name = sidebar.radio("Lihat", pages, index=0, key="lab_page")
+    page_name = sidebar.radio("Lihat", pages, index=0, key="harian_page")
 
     if page_name == "Ringkasan":
         render_overview(frame, ponds)
     else:
         render_pond(frame, page_name)
-
-
-selected_page = st.navigation(
-    [
-        st.Page(
-            page,
-            title="Lab lengkap",
-            icon=":material/science:",
-            url_path="lab-lengkap",
-            default=True,
-        ),
-        st.Page(
-            harian_page,
-            title="Harian",
-            icon=":material/calendar_today:",
-            url_path="harian",
-        ),
-    ],
-    position="top",
-)
-selected_page.run()

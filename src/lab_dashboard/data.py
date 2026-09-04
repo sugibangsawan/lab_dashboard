@@ -9,7 +9,9 @@ from urllib.request import Request, urlopen
 import pandas as pd
 
 SHEET_ID = "1Ge2ghdKDu6Q6AcbCIB71tIzdYvpvAE0eDUrvTtxWWfM"
-SHEET_GID = "2083899917"
+LAB_SHEET_GID = "2083899917"
+HARIAN_SHEET_GID = "1480880170"
+SHEET_GID = LAB_SHEET_GID
 CSV_URL = (
     f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export"
     f"?format=csv&gid={SHEET_GID}"
@@ -39,6 +41,23 @@ NUMERIC_COLUMNS = [
     "Vibrio Total",
 ]
 
+HARIAN_NUMERIC_COLUMNS = [
+    "DOC",
+    "Pakan Harian",
+    "pH Pagi",
+    "pH Sore",
+    "Kecerahan Pagi",
+    "Kecerahan Sore",
+]
+
+HARIAN_FOCUS_COLUMNS = [
+    "Pakan Harian",
+    "pH Pagi",
+    "pH Sore",
+    "Kecerahan Pagi",
+    "Kecerahan Sore",
+]
+
 # Typical vannamei pond guidance used only for dashboard coloring.
 THRESHOLDS: dict[str, dict[str, float]] = {
     "pH Pagi": {"low": 7.5, "high": 8.5, "warn_low": 7.3, "warn_high": 8.7},
@@ -52,11 +71,22 @@ THRESHOLDS: dict[str, dict[str, float]] = {
     "PO4": {"high": 0.4, "warn_high": 0.6},
     "Vibrio Hijau": {"high": 100, "warn_high": 500},
     "Vibrio Total": {"high": 2000, "warn_high": 5000},
+    "Kecerahan Pagi": {"low": 25, "high": 40, "warn_low": 15, "warn_high": 50},
+    "Kecerahan Sore": {"low": 25, "high": 40, "warn_low": 15, "warn_high": 50},
+    "Diff pH": {"low": 0.0, "high": 0.5, "warn_low": -0.2, "warn_high": 1.0},
+    "Diff Kecerahan": {"low": -10, "high": 10, "warn_low": -15, "warn_high": 15},
 }
 
 
-def fetch_sheet_csv(timeout: int = 30) -> str:
-    request = Request(CSV_URL, headers={"User-Agent": "lab-dashboard/0.1"})
+def sheet_csv_url(gid: str = SHEET_GID) -> str:
+    return (
+        f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export"
+        f"?format=csv&gid={gid}"
+    )
+
+
+def fetch_sheet_csv(timeout: int = 30, gid: str = SHEET_GID) -> str:
+    request = Request(sheet_csv_url(gid), headers={"User-Agent": "lab-dashboard/0.1"})
     with urlopen(request, timeout=timeout) as response:
         return response.read().decode("utf-8-sig")
 
@@ -65,7 +95,7 @@ def _to_number(value: object) -> float | None:
     if value is None or (isinstance(value, float) and pd.isna(value)):
         return None
     text = str(value).strip().replace(",", ".")
-    if not text or text in {"-", "—", "n/a", "N/A", "NA"}:
+    if not text or text.upper() in {"-", "—", "N/A", "NA", "TD"}:
         return None
     text = text.rstrip(".")
     try:
@@ -85,23 +115,77 @@ def _normalize_pond(name: object) -> str | None:
     return pond
 
 
+_MONTHS = {
+    "jan": 1,
+    "january": 1,
+    "januari": 1,
+    "feb": 2,
+    "february": 2,
+    "februari": 2,
+    "mar": 3,
+    "march": 3,
+    "maret": 3,
+    "apr": 4,
+    "april": 4,
+    "may": 5,
+    "mei": 5,
+    "jun": 6,
+    "june": 6,
+    "juni": 6,
+    "jul": 7,
+    "july": 7,
+    "juli": 7,
+    "aug": 8,
+    "august": 8,
+    "agt": 8,
+    "agustus": 8,
+    "sep": 9,
+    "sept": 9,
+    "september": 9,
+    "oct": 10,
+    "october": 10,
+    "okt": 10,
+    "oktober": 10,
+    "nov": 11,
+    "november": 11,
+    "dec": 12,
+    "december": 12,
+    "des": 12,
+    "desember": 12,
+}
+
+
 def _parse_date(value: object) -> datetime | None:
     if value is None or (isinstance(value, float) and pd.isna(value)):
         return None
     text = str(value).strip()
     if not text:
         return None
-    for fmt in ("%d %b %y", "%d %b %Y", "%d/%m/%Y", "%Y-%m-%d"):
+    for fmt in ("%d %b %y", "%d %b %Y", "%d %B %Y", "%d %B %y", "%d/%m/%Y", "%Y-%m-%d"):
         try:
             return datetime.strptime(text, fmt)
         except ValueError:
             continue
+    parts = text.replace(",", " ").split()
+    if len(parts) == 3 and parts[0].isdigit() and parts[2].isdigit():
+        month = _MONTHS.get(parts[1].lower().rstrip("."))
+        if month:
+            year = int(parts[2])
+            if year < 100:
+                year += 2000
+            try:
+                return datetime(year, month, int(parts[0]))
+            except ValueError:
+                return None
     return None
 
 
-def load_lab_data(csv_text: str | None = None) -> pd.DataFrame:
-    raw = csv_text if csv_text is not None else fetch_sheet_csv()
-    frame = pd.read_csv(io.StringIO(raw), header=2)
+def _read_unit_sheet(
+    csv_text: str,
+    numeric_columns: list[str],
+    measured_columns: list[str],
+) -> pd.DataFrame:
+    frame = pd.read_csv(io.StringIO(csv_text), header=2)
     frame.columns = [str(column).strip() for column in frame.columns]
     frame = frame.loc[:, ~frame.columns.str.match(r"^Unnamed")]
 
@@ -112,16 +196,31 @@ def load_lab_data(csv_text: str | None = None) -> pd.DataFrame:
     frame["Tanggal"] = frame["Tanggal"].map(_parse_date)
     frame = frame.dropna(subset=["Tanggal", "Kolam"])
 
-    for column in NUMERIC_COLUMNS:
+    for column in numeric_columns:
         if column in frame.columns:
             frame[column] = frame[column].map(_to_number)
         else:
             frame[column] = pd.NA
 
-    measured = [column for column in NUMERIC_COLUMNS if column != "DOC"]
-    has_values = frame[measured].notna().any(axis=1)
+    present_measured = [column for column in measured_columns if column in frame.columns]
+    has_values = frame[present_measured].notna().any(axis=1)
     frame = frame.loc[has_values].copy()
-    frame = frame.sort_values(["Kolam", "Tanggal"]).reset_index(drop=True)
+    keep = ["Tanggal", "Kolam", *numeric_columns]
+    frame = frame.loc[:, [column for column in keep if column in frame.columns]]
+    return frame.sort_values(["Kolam", "Tanggal"]).reset_index(drop=True)
+
+
+def load_lab_data(csv_text: str | None = None) -> pd.DataFrame:
+    raw = csv_text if csv_text is not None else fetch_sheet_csv(gid=LAB_SHEET_GID)
+    measured = [column for column in NUMERIC_COLUMNS if column != "DOC"]
+    return _read_unit_sheet(raw, NUMERIC_COLUMNS, measured)
+
+
+def load_harian_data(csv_text: str | None = None) -> pd.DataFrame:
+    raw = csv_text if csv_text is not None else fetch_sheet_csv(gid=HARIAN_SHEET_GID)
+    frame = _read_unit_sheet(raw, HARIAN_NUMERIC_COLUMNS, HARIAN_FOCUS_COLUMNS)
+    frame["Diff pH"] = frame["pH Sore"] - frame["pH Pagi"]
+    frame["Diff Kecerahan"] = frame["Kecerahan Sore"] - frame["Kecerahan Pagi"]
     return frame
 
 

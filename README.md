@@ -8,3 +8,5 @@ uv run lab-dashboard
 ```
 
 The app opens in the browser. Use the top navigation to switch between lab lengkap and harian. In harian, each pond profile focuses on pakan harian, pH pagi/sore, and kecerahan pagi/sore.
+
+On Streamlit Community Cloud, set the main file to `main.py` (not a nested `streamlit run`).

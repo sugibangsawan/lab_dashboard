@@ -185,11 +185,11 @@ def render_overview(frame: pd.DataFrame, ponds: list[str]) -> None:
     st.subheader("Perbandingan antar kolam")
     left, right = st.columns(2)
     with left:
-        st.plotly_chart(_comparison_chart(frame, "pH Pagi", ponds), use_container_width=True)
-        st.plotly_chart(_comparison_chart(frame, "Alkalinitas", ponds), use_container_width=True)
+        st.plotly_chart(_comparison_chart(frame, "NH4", ponds), width="stretch")
+        st.plotly_chart(_comparison_chart(frame, "Vibrio Hijau", ponds), width="stretch")
     with right:
-        st.plotly_chart(_comparison_chart(frame, "NH3", ponds), use_container_width=True)
-        st.plotly_chart(_comparison_chart(frame, "Vibrio Total", ponds), use_container_width=True)
+        st.plotly_chart(_comparison_chart(frame, "NO2", ponds), width="stretch")
+        st.plotly_chart(_comparison_chart(frame, "Vibrio Kuning", ponds), width="stretch")
 
 
 def render_pond(frame: pd.DataFrame, pond: str) -> None:
@@ -251,8 +251,8 @@ def render_pond(frame: pd.DataFrame, pond: str) -> None:
     table["Tanggal"] = table["Tanggal"].dt.strftime("%d %b %Y")
     display_cols = ["Tanggal", "DOC"] + [
         col
-        for group in KPI_GROUPS
-        for col, _ in group
+        for _, metrics in KPI_GROUPS
+        for col, _ in metrics
         if col in table.columns
     ]
     st.subheader("Riwayat lab")

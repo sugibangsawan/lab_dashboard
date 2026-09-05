@@ -15,7 +15,7 @@ KPI_GROUPS = [
 ]
 
 
-@st.cache_data(ttl=120, show_spinner="Mengambil data harian (pH & kecerahan)...")
+@st.cache_data(ttl=120, max_entries=4, refresh_mode="background", show_spinner="Mengambil data harian (pH & kecerahan)...")
 def _cached_data() -> pd.DataFrame:
     return load_harian_data()
 
@@ -148,7 +148,7 @@ def page() -> None:
     sidebar.caption(f"{len(frame)} baris · {len(growout)} kolam budidaya")
 
     pages = ["Ringkasan"] + ponds
-    page_name = sidebar.radio("Lihat", pages, index=0, key="harian_page")
+    page_name = sidebar.radio("Lihat", pages, key="harian_page")
 
     if page_name == "Ringkasan":
         render_overview(frame, ponds)

@@ -15,7 +15,9 @@ def _running_inside_streamlit() -> bool:
 
 
 if _running_inside_streamlit():
-    import lab_dashboard.dashboard as _app  # noqa: F401
+    from lab_dashboard.dashboard import run
+
+    run()
 else:
     from streamlit.web import cli as stcli
 

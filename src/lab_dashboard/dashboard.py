@@ -24,7 +24,7 @@ KPI_GROUPS = [
 ]
 
 
-@st.cache_data(ttl=120, show_spinner="Mengambil data dari Google Sheet...")
+@st.cache_data(ttl=120, max_entries=4, refresh_mode="background", show_spinner="Mengambil data dari Google Sheet...")
 def _cached_data() -> pd.DataFrame:
     return load_lab_data()
 
@@ -148,7 +148,7 @@ def page() -> None:
     sidebar.caption(f"{len(frame)} baris · {len(growout)} kolam budidaya")
 
     pages = ["Ringkasan"] + ponds
-    page_name = sidebar.radio("Lihat", pages, index=0, key="lab_page")
+    page_name = sidebar.radio("Lihat", pages, key="lab_page")
 
     if page_name == "Ringkasan":
         render_overview(frame, ponds)
@@ -156,22 +156,27 @@ def page() -> None:
         render_pond(frame, page_name)
 
 
-selected_page = st.navigation(
-    [
-        st.Page(
-            page,
-            title="Lab lengkap",
-            icon=":material/science:",
-            url_path="lab-lengkap",
-            default=True,
-        ),
-        st.Page(
-            harian_page,
-            title="Harian",
-            icon=":material/calendar_today:",
-            url_path="harian",
-        ),
-    ],
-    position="top",
-)
-selected_page.run()
+def run() -> None:
+    selected_page = st.navigation(
+        [
+            st.Page(
+                page,
+                title="Lab lengkap",
+                icon=":material/science:",
+                url_path="lab-lengkap",
+                default=True,
+            ),
+            st.Page(
+                harian_page,
+                title="Harian",
+                icon=":material/calendar_today:",
+                url_path="harian",
+            ),
+        ],
+        position="top",
+    )
+    selected_page.run()
+
+
+if __name__ == "__main__":
+    run()

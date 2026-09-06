@@ -41,7 +41,13 @@ def apply_style() -> None:
     st.markdown(
         """
         <style>
-        .block-container { padding-top: 1.4rem; padding-bottom: 2rem; }
+        .block-container {
+            padding-top: 1.4rem;
+            padding-bottom: 2rem;
+            max-width: 100%;
+            padding-left: 2rem;
+            padding-right: 2rem;
+        }
         div[data-testid="stMetric"] {
             background: #f8fafc;
             border: 1px solid #e2e8f0;
@@ -66,6 +72,7 @@ def _chart_layout(title: str, *, height: int) -> dict[str, object]:
             pad=dict(t=2, b=8),
         ),
         height=height,
+        autosize=True,
         margin=dict(l=40, r=16, t=72, b=32),
         legend=dict(
             orientation="h",

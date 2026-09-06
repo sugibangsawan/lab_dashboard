@@ -5,13 +5,6 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(
-    page_title="Unit D Dashboard",
-    page_icon=":material/water_drop:",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
-
 from lab_dashboard.data import load_lab_data, latest_row, ponds_in_data
 from lab_dashboard.harian import page as harian_page
 from lab_dashboard.ui import apply_style, comparison_chart, fmt, kpi_card, line_chart, status_badge
@@ -49,13 +42,10 @@ def render_overview(frame: pd.DataFrame, ponds: list[str]) -> None:
             )
 
     st.subheader("Perbandingan antar kolam")
-    left, right = st.columns(2)
-    with left:
-        st.plotly_chart(comparison_chart(frame, "NH4", ponds), width="stretch")
-        st.plotly_chart(comparison_chart(frame, "Vibrio Hijau", ponds), width="stretch")
-    with right:
-        st.plotly_chart(comparison_chart(frame, "NO2", ponds), width="stretch")
-        st.plotly_chart(comparison_chart(frame, "Vibrio Kuning", ponds), width="stretch")
+    st.plotly_chart(comparison_chart(frame, "NH4", ponds), width="stretch", config={"responsive": True})
+    st.plotly_chart(comparison_chart(frame, "NO2", ponds), width="stretch", config={"responsive": True})
+    st.plotly_chart(comparison_chart(frame, "Vibrio Hijau", ponds), width="stretch", config={"responsive": True})
+    st.plotly_chart(comparison_chart(frame, "Vibrio Kuning", ponds), width="stretch", config={"responsive": True})
 
 
 def render_pond(frame: pd.DataFrame, pond: str) -> None:
@@ -84,34 +74,36 @@ def render_pond(frame: pd.DataFrame, pond: str) -> None:
                 kpi_card(name, latest.get(name), unit, name)
 
     st.markdown("")
-    c1, c2 = st.columns(2)
-    with c1:
-        st.plotly_chart(
-            line_chart(subset, ["pH Pagi", "pH Sore"], "pH pagi & sore", "pH"),
-            width="stretch",
-        )
-        st.plotly_chart(
-            line_chart(subset, ["Salinitas"], "Salinitas", "ppt"),
-            width="stretch",
-        )
-        st.plotly_chart(
-            line_chart(subset, ["TOM"], "TOM", "ppm"),
-            width="stretch",
-        )
-    with c2:
-        st.plotly_chart(
-            line_chart(subset, ["NH4", "NH3", "NO2", "PO4"], "NH4, NH3, NO2, PO4", "ppm"),
-            width="stretch",
-        )
-        st.plotly_chart(
-            line_chart(
-                subset,
-                ["Vibrio Hijau", "Vibrio Kuning", "Swanella", "Vibrio Total"],
-                "Vibrio",
-                "CFU",
-            ),
-            width="stretch",
-        )
+    st.plotly_chart(
+        line_chart(subset, ["pH Pagi", "pH Sore"], "pH pagi & sore", "pH"),
+        width="stretch",
+        config={"responsive": True},
+    )
+    st.plotly_chart(
+        line_chart(subset, ["Salinitas"], "Salinitas", "ppt"),
+        width="stretch",
+        config={"responsive": True},
+    )
+    st.plotly_chart(
+        line_chart(subset, ["TOM"], "TOM", "ppm"),
+        width="stretch",
+        config={"responsive": True},
+    )
+    st.plotly_chart(
+        line_chart(subset, ["NH4", "NH3", "NO2", "PO4"], "NH4, NH3, NO2, PO4", "ppm"),
+        width="stretch",
+        config={"responsive": True},
+    )
+    st.plotly_chart(
+        line_chart(
+            subset,
+            ["Vibrio Hijau", "Vibrio Kuning", "Swanella", "Vibrio Total"],
+            "Vibrio",
+            "CFU",
+        ),
+        width="stretch",
+        config={"responsive": True},
+    )
 
     table = subset.drop(columns=["Kolam"]).copy()
     table["Tanggal"] = table["Tanggal"].dt.strftime("%d %b %Y")
@@ -179,4 +171,10 @@ def run() -> None:
 
 
 if __name__ == "__main__":
+    st.set_page_config(
+        page_title="Unit D Dashboard",
+        page_icon=":material/water_drop:",
+        layout="wide",
+        initial_sidebar_state="expanded",
+    )
     run()

@@ -15,6 +15,14 @@ def _running_inside_streamlit() -> bool:
 
 
 if _running_inside_streamlit():
+    import streamlit as st
+
+    st.set_page_config(
+        page_title="Unit D Dashboard",
+        page_icon=":material/water_drop:",
+        layout="wide",
+        initial_sidebar_state="expanded",
+    )
     from lab_dashboard.dashboard import run
 
     run()

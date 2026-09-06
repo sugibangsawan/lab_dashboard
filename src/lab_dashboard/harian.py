@@ -44,16 +44,13 @@ def render_overview(frame: pd.DataFrame, ponds: list[str]) -> None:
             )
 
     st.subheader("Perbandingan antar kolam")
-    left, right = st.columns(2)
-    with left:
-        st.plotly_chart(comparison_chart(frame, "Pakan Harian", ponds), width="stretch")
-        st.plotly_chart(comparison_chart(frame, "pH Pagi", ponds), width="stretch")
-        st.plotly_chart(comparison_chart(frame, "Kecerahan Pagi", ponds), width="stretch")
-        st.plotly_chart(comparison_chart(frame, "Diff pH", ponds), width="stretch")
-    with right:
-        st.plotly_chart(comparison_chart(frame, "pH Sore", ponds), width="stretch")
-        st.plotly_chart(comparison_chart(frame, "Kecerahan Sore", ponds), width="stretch")
-        st.plotly_chart(comparison_chart(frame, "Diff Kecerahan", ponds), width="stretch")
+    st.plotly_chart(comparison_chart(frame, "Pakan Harian", ponds), width="stretch", config={"responsive": True})
+    st.plotly_chart(comparison_chart(frame, "pH Pagi", ponds), width="stretch", config={"responsive": True})
+    st.plotly_chart(comparison_chart(frame, "pH Sore", ponds), width="stretch", config={"responsive": True})
+    st.plotly_chart(comparison_chart(frame, "Kecerahan Pagi", ponds), width="stretch", config={"responsive": True})
+    st.plotly_chart(comparison_chart(frame, "Kecerahan Sore", ponds), width="stretch", config={"responsive": True})
+    st.plotly_chart(comparison_chart(frame, "Diff pH", ponds), width="stretch", config={"responsive": True})
+    st.plotly_chart(comparison_chart(frame, "Diff Kecerahan", ponds), width="stretch", config={"responsive": True})
 
 
 def render_pond(frame: pd.DataFrame, pond: str) -> None:
@@ -82,39 +79,41 @@ def render_pond(frame: pd.DataFrame, pond: str) -> None:
                 kpi_card(name, latest.get(name), unit, name)
 
     st.markdown("")
-    c1, c2 = st.columns(2)
-    with c1:
-        st.plotly_chart(
-            line_chart(subset, ["Pakan Harian"], "Pakan harian", "kg"),
-            width="stretch",
-        )
-        st.plotly_chart(
-            line_chart(subset, ["pH Pagi", "pH Sore"], "pH pagi & sore", "pH"),
-            width="stretch",
-        )
-        st.plotly_chart(
-            line_chart(subset, ["Diff pH"], "Diff pH (sore − pagi)", "Δ pH"),
-            width="stretch",
-        )
-    with c2:
-        st.plotly_chart(
-            line_chart(
-                subset,
-                ["Kecerahan Pagi", "Kecerahan Sore"],
-                "Kecerahan pagi & sore",
-                "cm",
-            ),
-            width="stretch",
-        )
-        st.plotly_chart(
-            line_chart(
-                subset,
-                ["Diff Kecerahan"],
-                "Diff kecerahan (sore − pagi)",
-                "cm",
-            ),
-            width="stretch",
-        )
+    st.plotly_chart(
+        line_chart(subset, ["Pakan Harian"], "Pakan harian", "kg"),
+        width="stretch",
+        config={"responsive": True},
+    )
+    st.plotly_chart(
+        line_chart(subset, ["pH Pagi", "pH Sore"], "pH pagi & sore", "pH"),
+        width="stretch",
+        config={"responsive": True},
+    )
+    st.plotly_chart(
+        line_chart(subset, ["Diff pH"], "Diff pH (sore − pagi)", "Δ pH"),
+        width="stretch",
+        config={"responsive": True},
+    )
+    st.plotly_chart(
+        line_chart(
+            subset,
+            ["Kecerahan Pagi", "Kecerahan Sore"],
+            "Kecerahan pagi & sore",
+            "cm",
+        ),
+        width="stretch",
+        config={"responsive": True},
+    )
+    st.plotly_chart(
+        line_chart(
+            subset,
+            ["Diff Kecerahan"],
+            "Diff kecerahan (sore − pagi)",
+            "cm",
+        ),
+        width="stretch",
+        config={"responsive": True},
+    )
 
     table = subset.copy()
     table["Tanggal"] = table["Tanggal"].dt.strftime("%d %b %Y")

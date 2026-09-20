@@ -1,23 +1,63 @@
-"""Fetch and clean Lab Lengkap Unit D data from the public Google Sheet."""
+"""Fetch and clean lab and harian data from public Google Sheets."""
 
 from __future__ import annotations
 
 import io
+from dataclasses import dataclass
 from datetime import datetime
 from urllib.request import Request, urlopen
 
 import pandas as pd
 
-SHEET_ID = "1Ge2ghdKDu6Q6AcbCIB71tIzdYvpvAE0eDUrvTtxWWfM"
-LAB_SHEET_GID = "2083899917"
-HARIAN_SHEET_GID = "1480880170"
+
+@dataclass(frozen=True)
+class UnitConfig:
+    key: str
+    sheet_id: str
+    lab_gid: str
+    harian_gid: str
+    pond_order: tuple[str, ...]
+    lab_title: str
+    harian_title: str
+    lab_caption: str
+    harian_caption: str
+
+
+UNITS: dict[str, UnitConfig] = {
+    "D": UnitConfig(
+        key="D",
+        sheet_id="1Ge2ghdKDu6Q6AcbCIB71tIzdYvpvAE0eDUrvTtxWWfM",
+        lab_gid="2083899917",
+        harian_gid="1480880170",
+        pond_order=("D2", "D3", "D5", "D7", "D8", "D9", "Tandon"),
+        lab_title="Lab Data Lengkap Unit D",
+        harian_title="Lab Harian Unit D",
+        lab_caption="Data live dari sheet **lengkap [D]** · Lab Lengkap Unit D Periode Tebar Juni 2026",
+        harian_caption="Data live dari sheet **harian [D]** · Pakan, pH, dan kecerahan per kolam",
+    ),
+    "C": UnitConfig(
+        key="C",
+        sheet_id="13UU3WfwOiLPtG2ZgP4nNLpQT0xL0JdkcWS80YEDY85k",
+        lab_gid="780883902",
+        harian_gid="0",
+        pond_order=("C1", "C2", "C3", "C5", "C6", "C7", "C9", "C10", "C12", "Tandon"),
+        lab_title="Lab Data Lengkap Unit C",
+        harian_title="Lab Harian Unit C",
+        lab_caption="Data live dari sheet **Lengkap C** · Lab Lengkap Unit C Periode Tebar September 2026",
+        harian_caption="Data live dari sheet **Harian C** · Pakan, pH, dan kecerahan per kolam",
+    ),
+}
+
+SHEET_ID = UNITS["D"].sheet_id
+LAB_SHEET_GID = UNITS["D"].lab_gid
+HARIAN_SHEET_GID = UNITS["D"].harian_gid
 SHEET_GID = LAB_SHEET_GID
 CSV_URL = (
     f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export"
     f"?format=csv&gid={SHEET_GID}"
 )
 
-POND_ORDER = ["D2", "D3", "D5", "D7", "D8", "D9", "Tandon"]
+POND_ORDER = list(UNITS["D"].pond_order)
 
 NUMERIC_COLUMNS = [
     "DOC",
@@ -77,18 +117,40 @@ THRESHOLDS: dict[str, dict[str, float]] = {
     "Diff Kecerahan": {"low": -10, "high": 10, "warn_low": -15, "warn_high": 15},
 }
 
+UNIT_THRESHOLDS: dict[str, dict[str, dict[str, float]]] = {
+    "C": {
+        "Vibrio Total": {"high": 1000},
+        "Vibrio Hijau": {"high": 100, "warn_high": 1000},
+        "Vibrio Kuning": {"high": 1000},
+    }
+}
 
-def sheet_csv_url(gid: str = SHEET_GID) -> str:
+
+def sheet_csv_url(gid: str = SHEET_GID, sheet_id: str = SHEET_ID) -> str:
     return (
-        f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export"
+        f"https://docs.google.com/spreadsheets/d/{sheet_id}/export"
         f"?format=csv&gid={gid}"
     )
 
 
-def fetch_sheet_csv(timeout: int = 30, gid: str = SHEET_GID) -> str:
-    request = Request(sheet_csv_url(gid), headers={"User-Agent": "lab-dashboard/0.1"})
+def fetch_sheet_csv(
+    timeout: int = 30,
+    gid: str = SHEET_GID,
+    sheet_id: str = SHEET_ID,
+) -> str:
+    request = Request(
+        sheet_csv_url(gid, sheet_id),
+        headers={"User-Agent": "lab-dashboard/0.1"},
+    )
     with urlopen(request, timeout=timeout) as response:
         return response.read().decode("utf-8-sig")
+
+
+def _unit(unit: str) -> UnitConfig:
+    try:
+        return UNITS[unit]
+    except KeyError as exc:
+        raise ValueError(f"Unknown unit {unit!r}. Expected one of {sorted(UNITS)}.") from exc
 
 
 def _to_number(value: object) -> float | None:
@@ -180,17 +242,22 @@ def _parse_date(value: object) -> datetime | None:
     return None
 
 
+def _parse_csv_with_header(csv_text: str) -> pd.DataFrame:
+    for header in (0, 1, 2):
+        frame = pd.read_csv(io.StringIO(csv_text), header=header)
+        frame.columns = [str(column).strip() for column in frame.columns]
+        if "Tanggal" in frame.columns and "Kolam" in frame.columns:
+            return frame
+    raise ValueError("Sheet is missing Tanggal or Kolam columns.")
+
+
 def _read_unit_sheet(
     csv_text: str,
     numeric_columns: list[str],
     measured_columns: list[str],
 ) -> pd.DataFrame:
-    frame = pd.read_csv(io.StringIO(csv_text), header=2)
-    frame.columns = [str(column).strip() for column in frame.columns]
+    frame = _parse_csv_with_header(csv_text)
     frame = frame.loc[:, ~frame.columns.str.match(r"^Unnamed")]
-
-    if "Tanggal" not in frame.columns or "Kolam" not in frame.columns:
-        raise ValueError("Sheet is missing Tanggal or Kolam columns.")
 
     frame["Kolam"] = frame["Kolam"].map(_normalize_pond)
     frame["Tanggal"] = frame["Tanggal"].map(_parse_date)
@@ -210,25 +277,34 @@ def _read_unit_sheet(
     return frame.sort_values(["Kolam", "Tanggal"]).reset_index(drop=True)
 
 
-def load_lab_data(csv_text: str | None = None) -> pd.DataFrame:
-    raw = csv_text if csv_text is not None else fetch_sheet_csv(gid=LAB_SHEET_GID)
+def load_lab_data(csv_text: str | None = None, unit: str = "D") -> pd.DataFrame:
+    config = _unit(unit)
+    raw = (
+        csv_text
+        if csv_text is not None
+        else fetch_sheet_csv(gid=config.lab_gid, sheet_id=config.sheet_id)
+    )
     measured = [column for column in NUMERIC_COLUMNS if column != "DOC"]
     return _read_unit_sheet(raw, NUMERIC_COLUMNS, measured)
 
 
-def load_harian_data(csv_text: str | None = None) -> pd.DataFrame:
-    raw = csv_text if csv_text is not None else fetch_sheet_csv(gid=HARIAN_SHEET_GID)
+def load_harian_data(csv_text: str | None = None, unit: str = "D") -> pd.DataFrame:
+    config = _unit(unit)
+    raw = (
+        csv_text
+        if csv_text is not None
+        else fetch_sheet_csv(gid=config.harian_gid, sheet_id=config.sheet_id)
+    )
     frame = _read_unit_sheet(raw, HARIAN_NUMERIC_COLUMNS, HARIAN_FOCUS_COLUMNS)
     frame["Diff pH"] = frame["pH Sore"] - frame["pH Pagi"]
     frame["Diff Kecerahan"] = frame["Kecerahan Sore"] - frame["Kecerahan Pagi"]
     return frame
 
 
-def ponds_in_data(frame: pd.DataFrame) -> list[str]:
+def ponds_in_data(frame: pd.DataFrame, unit: str = "D") -> list[str]:
+    order = list(_unit(unit).pond_order)
     present = set(frame["Kolam"].unique())
-    return [pond for pond in POND_ORDER if pond in present] + sorted(
-        present.difference(POND_ORDER)
-    )
+    return [pond for pond in order if pond in present] + sorted(present.difference(order))
 
 
 def latest_row(frame: pd.DataFrame, pond: str) -> pd.Series | None:
@@ -238,15 +314,15 @@ def latest_row(frame: pd.DataFrame, pond: str) -> pd.Series | None:
     return subset.iloc[-1]
 
 
-def metric_status(column: str, value: float | None) -> str:
+def metric_status(column: str, value: float | None, farm: str = "D") -> str:
     if value is None or pd.isna(value):
         return "na"
-    rules = THRESHOLDS.get(column)
+    rules = UNIT_THRESHOLDS.get(farm, {}).get(column) or THRESHOLDS.get(column)
     if not rules:
         return "ok"
     if "low" in rules and value < rules.get("warn_low", rules["low"]):
         return "alert"
-    if "high" in rules and value > rules.get("warn_high", rules["high"]):
+    if "high" in rules and "warn_high" in rules and value > rules["warn_high"]:
         return "alert"
     if "low" in rules and value < rules["low"]:
         return "warn"

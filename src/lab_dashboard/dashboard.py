@@ -5,9 +5,9 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from lab_dashboard.data import load_lab_data, latest_row, ponds_in_data
-from lab_dashboard.harian import page as harian_page
-from lab_dashboard.ui import apply_style, comparison_chart, fmt, kpi_card, line_chart, status_badge
+from lab_dashboard.data import UNITS, load_lab_data, latest_row, ponds_in_data
+from lab_dashboard.harian import make_harian_page
+from lab_dashboard.ui import apply_style, comparison_chart, fmt, kpi_card, line_chart, show_chart, status_badge
 
 KPI_GROUPS = [
     ("Air", [("pH Pagi", "pH pagi"), ("pH Sore", "pH sore"), ("Salinitas", "ppt"), ("Alkalinitas", "ppm")]),
@@ -17,12 +17,12 @@ KPI_GROUPS = [
 ]
 
 
-@st.cache_data(ttl=120, max_entries=4, refresh_mode="background", show_spinner="Mengambil data dari Google Sheet...")
-def _cached_data() -> pd.DataFrame:
-    return load_lab_data()
+@st.cache_data(ttl=120, max_entries=8, refresh_mode="background", show_spinner="Mengambil data dari Google Sheet...")
+def _cached_data(unit: str) -> pd.DataFrame:
+    return load_lab_data(unit=unit)
 
 
-def render_overview(frame: pd.DataFrame, ponds: list[str]) -> None:
+def render_overview(frame: pd.DataFrame, ponds: list[str], farm: str = "D") -> None:
     st.subheader("Ringkasan kolam")
     cards = st.columns(len(ponds))
     for column, pond in zip(cards, ponds, strict=True):
@@ -37,18 +37,19 @@ def render_overview(frame: pd.DataFrame, ponds: list[str]) -> None:
             st.markdown(
                 f"pH {fmt(row.get('pH Pagi'))} / {fmt(row.get('pH Sore'))}<br>"
                 f"Alk {fmt(row.get('Alkalinitas'))} · NH₃ {fmt(row.get('NH3'), 3)}<br>"
-                f"Vibrio {fmt(row.get('Vibrio Total'), 0)} {status_badge('Vibrio Total', row.get('Vibrio Total'))}",
+                f"Vibrio {fmt(row.get('Vibrio Total'), 0)} "
+                f"{status_badge('Vibrio Total', row.get('Vibrio Total'), farm=farm)}",
                 unsafe_allow_html=True,
             )
 
     st.subheader("Perbandingan antar kolam")
-    st.plotly_chart(comparison_chart(frame, "NH4", ponds), width="stretch", config={"responsive": True})
-    st.plotly_chart(comparison_chart(frame, "NO2", ponds), width="stretch", config={"responsive": True})
-    st.plotly_chart(comparison_chart(frame, "Vibrio Hijau", ponds), width="stretch", config={"responsive": True})
-    st.plotly_chart(comparison_chart(frame, "Vibrio Kuning", ponds), width="stretch", config={"responsive": True})
+    show_chart(comparison_chart(frame, "NH4", ponds))
+    show_chart(comparison_chart(frame, "NO2", ponds))
+    show_chart(comparison_chart(frame, "Vibrio Hijau", ponds))
+    show_chart(comparison_chart(frame, "Vibrio Kuning", ponds))
 
 
-def render_pond(frame: pd.DataFrame, pond: str) -> None:
+def render_pond(frame: pd.DataFrame, pond: str, farm: str = "D") -> None:
     subset = frame.loc[frame["Kolam"] == pond].copy()
     if subset.empty:
         st.warning(f"Belum ada data untuk kolam {pond}.")
@@ -71,38 +72,21 @@ def render_pond(frame: pd.DataFrame, pond: str) -> None:
         cols = st.columns(len(metrics))
         for col, (name, unit) in zip(cols, metrics, strict=True):
             with col:
-                kpi_card(name, latest.get(name), unit, name)
+                kpi_card(name, latest.get(name), unit, name, farm=farm)
 
     st.markdown("")
-    st.plotly_chart(
-        line_chart(subset, ["pH Pagi", "pH Sore"], "pH pagi & sore", "pH"),
-        width="stretch",
-        config={"responsive": True},
-    )
-    st.plotly_chart(
-        line_chart(subset, ["Salinitas"], "Salinitas", "ppt"),
-        width="stretch",
-        config={"responsive": True},
-    )
-    st.plotly_chart(
-        line_chart(subset, ["TOM"], "TOM", "ppm"),
-        width="stretch",
-        config={"responsive": True},
-    )
-    st.plotly_chart(
-        line_chart(subset, ["NH4", "NH3", "NO2", "PO4"], "NH4, NH3, NO2, PO4", "ppm"),
-        width="stretch",
-        config={"responsive": True},
-    )
-    st.plotly_chart(
+    if farm != "C":
+        show_chart(line_chart(subset, ["pH Pagi", "pH Sore"], "pH pagi & sore", "pH"))
+        show_chart(line_chart(subset, ["Salinitas"], "Salinitas", "ppt"))
+    show_chart(line_chart(subset, ["TOM"], "TOM", "ppm"))
+    show_chart(line_chart(subset, ["NH4", "NH3", "NO2", "PO4"], "NH4, NH3, NO2, PO4", "ppm"))
+    show_chart(
         line_chart(
             subset,
             ["Vibrio Hijau", "Vibrio Kuning", "Swanella", "Vibrio Total"],
             "Vibrio",
             "CFU",
-        ),
-        width="stretch",
-        config={"responsive": True},
+        )
     )
 
     table = subset.drop(columns=["Kolam"]).copy()
@@ -117,54 +101,82 @@ def render_pond(frame: pd.DataFrame, pond: str) -> None:
     st.dataframe(table[display_cols], hide_index=True, width="stretch")
 
 
-def page() -> None:
-    apply_style()
-    st.title("Lab Data Lengkap Unit D")
-    st.caption("Data live dari sheet **lengkap [D]** · Lab Lengkap Unit D Periode Tebar Juni 2026")
+def make_lab_page(unit: str):
+    config = UNITS[unit]
 
-    sidebar = st.sidebar
-    sidebar.header("Kolam")
-    if sidebar.button("Muat ulang data", width="stretch", key="reload_lab"):
-        _cached_data.clear()
+    def page() -> None:
+        apply_style()
+        st.title(config.lab_title)
+        st.caption(config.lab_caption)
 
-    try:
-        frame = _cached_data()
-    except Exception as exc:
-        st.error(f"Gagal mengambil Google Sheet: {exc}")
-        st.stop()
+        sidebar = st.sidebar
+        sidebar.header("Kolam")
+        if sidebar.button("Muat ulang data", width="stretch", key=f"reload_lab_{unit}"):
+            _cached_data.clear()
 
-    ponds = ponds_in_data(frame)
-    growout = [pond for pond in ponds if pond != "Tandon"]
-    latest_date = frame["Tanggal"].max().strftime("%d %b %Y")
-    sidebar.caption(f"Update terakhir di sheet: **{latest_date}**")
-    sidebar.caption(f"{len(frame)} baris · {len(growout)} kolam budidaya")
+        try:
+            frame = _cached_data(unit)
+        except Exception as exc:
+            st.error(f"Gagal mengambil Google Sheet: {exc}")
+            st.stop()
 
-    pages = ["Ringkasan"] + ponds
-    page_name = sidebar.radio("Lihat", pages, key="lab_page")
+        ponds = ponds_in_data(frame, unit=unit)
+        growout = [pond for pond in ponds if pond != "Tandon"]
+        latest_date = frame["Tanggal"].max().strftime("%d %b %Y")
+        sidebar.caption(f"Update terakhir di sheet: **{latest_date}**")
+        sidebar.caption(f"{len(frame)} baris · {len(growout)} kolam budidaya")
 
-    if page_name == "Ringkasan":
-        render_overview(frame, ponds)
-    else:
-        render_pond(frame, page_name)
+        pages = ["Ringkasan"] + ponds
+        page_name = sidebar.radio("Lihat", pages, key=f"lab_page_{unit}")
+
+        if page_name == "Ringkasan":
+            render_overview(frame, ponds, farm=unit)
+        else:
+            render_pond(frame, page_name, farm=unit)
+
+    page.__name__ = f"lab_page_{unit}"
+    return page
+
+
+lab_page_d = make_lab_page("D")
+lab_page_c = make_lab_page("C")
+harian_page_d = make_harian_page("D")
+harian_page_c = make_harian_page("C")
 
 
 def run() -> None:
     selected_page = st.navigation(
-        [
-            st.Page(
-                page,
-                title="Lab lengkap",
-                icon=":material/science:",
-                url_path="lab-lengkap",
-                default=True,
-            ),
-            st.Page(
-                harian_page,
-                title="Harian",
-                icon=":material/calendar_today:",
-                url_path="harian",
-            ),
-        ],
+        {
+            "Lab Lengkap": [
+                st.Page(
+                    lab_page_c,
+                    title="Unit C",
+                    icon=":material/science:",
+                    url_path="c-lab",
+                    default=True,
+                ),
+                st.Page(
+                    lab_page_d,
+                    title="Unit D",
+                    icon=":material/science:",
+                    url_path="d-lab",
+                ),
+            ],
+            "Lab Harian": [
+                st.Page(
+                    harian_page_c,
+                    title="Unit C",
+                    icon=":material/calendar_today:",
+                    url_path="c-harian",
+                ),
+                st.Page(
+                    harian_page_d,
+                    title="Unit D",
+                    icon=":material/calendar_today:",
+                    url_path="d-harian",
+                ),
+            ],
+        },
         position="top",
     )
     selected_page.run()
@@ -172,7 +184,7 @@ def run() -> None:
 
 if __name__ == "__main__":
     st.set_page_config(
-        page_title="Unit D Dashboard",
+        page_title="Lab Dashboard",
         page_icon=":material/water_drop:",
         layout="wide",
         initial_sidebar_state="expanded",

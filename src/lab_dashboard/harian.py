@@ -5,8 +5,8 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from lab_dashboard.data import latest_row, load_harian_data, ponds_in_data
-from lab_dashboard.ui import apply_style, comparison_chart, fmt, kpi_card, line_chart, status_badge
+from lab_dashboard.data import UNITS, latest_row, load_harian_data, ponds_in_data
+from lab_dashboard.ui import apply_style, comparison_chart, fmt, kpi_card, line_chart, show_chart, status_badge
 
 KPI_GROUPS = [
     ("Pakan", [("Pakan Harian", "kg")]),
@@ -15,9 +15,9 @@ KPI_GROUPS = [
 ]
 
 
-@st.cache_data(ttl=120, max_entries=4, refresh_mode="background", show_spinner="Mengambil data harian (pH & kecerahan)...")
-def _cached_data() -> pd.DataFrame:
-    return load_harian_data()
+@st.cache_data(ttl=120, max_entries=8, refresh_mode="background", show_spinner="Mengambil data harian (pH & kecerahan)...")
+def _cached_data(unit: str) -> pd.DataFrame:
+    return load_harian_data(unit=unit)
 
 
 def render_overview(frame: pd.DataFrame, ponds: list[str]) -> None:
@@ -44,13 +44,13 @@ def render_overview(frame: pd.DataFrame, ponds: list[str]) -> None:
             )
 
     st.subheader("Perbandingan antar kolam")
-    st.plotly_chart(comparison_chart(frame, "Pakan Harian", ponds), width="stretch", config={"responsive": True})
-    st.plotly_chart(comparison_chart(frame, "pH Pagi", ponds), width="stretch", config={"responsive": True})
-    st.plotly_chart(comparison_chart(frame, "pH Sore", ponds), width="stretch", config={"responsive": True})
-    st.plotly_chart(comparison_chart(frame, "Kecerahan Pagi", ponds), width="stretch", config={"responsive": True})
-    st.plotly_chart(comparison_chart(frame, "Kecerahan Sore", ponds), width="stretch", config={"responsive": True})
-    st.plotly_chart(comparison_chart(frame, "Diff pH", ponds), width="stretch", config={"responsive": True})
-    st.plotly_chart(comparison_chart(frame, "Diff Kecerahan", ponds), width="stretch", config={"responsive": True})
+    show_chart(comparison_chart(frame, "Pakan Harian", ponds))
+    show_chart(comparison_chart(frame, "pH Pagi", ponds))
+    show_chart(comparison_chart(frame, "pH Sore", ponds))
+    show_chart(comparison_chart(frame, "Kecerahan Pagi", ponds))
+    show_chart(comparison_chart(frame, "Kecerahan Sore", ponds))
+    show_chart(comparison_chart(frame, "Diff pH", ponds))
+    show_chart(comparison_chart(frame, "Diff Kecerahan", ponds))
 
 
 def render_pond(frame: pd.DataFrame, pond: str) -> None:
@@ -79,40 +79,24 @@ def render_pond(frame: pd.DataFrame, pond: str) -> None:
                 kpi_card(name, latest.get(name), unit, name)
 
     st.markdown("")
-    st.plotly_chart(
-        line_chart(subset, ["Pakan Harian"], "Pakan harian", "kg"),
-        width="stretch",
-        config={"responsive": True},
-    )
-    st.plotly_chart(
-        line_chart(subset, ["pH Pagi", "pH Sore"], "pH pagi & sore", "pH"),
-        width="stretch",
-        config={"responsive": True},
-    )
-    st.plotly_chart(
-        line_chart(subset, ["Diff pH"], "Diff pH (sore − pagi)", "Δ pH"),
-        width="stretch",
-        config={"responsive": True},
-    )
-    st.plotly_chart(
+    show_chart(line_chart(subset, ["Pakan Harian"], "Pakan harian", "kg"))
+    show_chart(line_chart(subset, ["pH Pagi", "pH Sore"], "pH pagi & sore", "pH"))
+    show_chart(line_chart(subset, ["Diff pH"], "Diff pH (sore − pagi)", "Δ pH"))
+    show_chart(
         line_chart(
             subset,
             ["Kecerahan Pagi", "Kecerahan Sore"],
             "Kecerahan pagi & sore",
             "cm",
-        ),
-        width="stretch",
-        config={"responsive": True},
+        )
     )
-    st.plotly_chart(
+    show_chart(
         line_chart(
             subset,
             ["Diff Kecerahan"],
             "Diff kecerahan (sore − pagi)",
             "cm",
-        ),
-        width="stretch",
-        config={"responsive": True},
+        )
     )
 
     table = subset.copy()
@@ -124,32 +108,38 @@ def render_pond(frame: pd.DataFrame, pond: str) -> None:
     st.dataframe(table[display_cols], hide_index=True, width="stretch")
 
 
-def page() -> None:
-    apply_style()
-    st.title("Lab Harian Unit D")
-    st.caption("Data live dari sheet **harian [D]** · Pakan, pH, dan kecerahan per kolam")
+def make_harian_page(unit: str):
+    config = UNITS[unit]
 
-    sidebar = st.sidebar
-    sidebar.header("Kolam")
-    if sidebar.button("Muat ulang data", width="stretch", key="reload_harian"):
-        _cached_data.clear()
+    def page() -> None:
+        apply_style()
+        st.title(config.harian_title)
+        st.caption(config.harian_caption)
 
-    try:
-        frame = _cached_data()
-    except Exception as exc:
-        st.error(f"Gagal mengambil Google Sheet: {exc}")
-        st.stop()
+        sidebar = st.sidebar
+        sidebar.header("Kolam")
+        if sidebar.button("Muat ulang data", width="stretch", key=f"reload_harian_{unit}"):
+            _cached_data.clear()
 
-    ponds = ponds_in_data(frame)
-    growout = [pond for pond in ponds if pond != "Tandon"]
-    latest_date = frame["Tanggal"].max().strftime("%d %b %Y")
-    sidebar.caption(f"Update terakhir di sheet: **{latest_date}**")
-    sidebar.caption(f"{len(frame)} baris · {len(growout)} kolam budidaya")
+        try:
+            frame = _cached_data(unit)
+        except Exception as exc:
+            st.error(f"Gagal mengambil Google Sheet: {exc}")
+            st.stop()
 
-    pages = ["Ringkasan"] + ponds
-    page_name = sidebar.radio("Lihat", pages, key="harian_page")
+        ponds = ponds_in_data(frame, unit=unit)
+        growout = [pond for pond in ponds if pond != "Tandon"]
+        latest_date = frame["Tanggal"].max().strftime("%d %b %Y")
+        sidebar.caption(f"Update terakhir di sheet: **{latest_date}**")
+        sidebar.caption(f"{len(frame)} baris · {len(growout)} kolam budidaya")
 
-    if page_name == "Ringkasan":
-        render_overview(frame, ponds)
-    else:
-        render_pond(frame, page_name)
+        pages = ["Ringkasan"] + ponds
+        page_name = sidebar.radio("Lihat", pages, key=f"harian_page_{unit}")
+
+        if page_name == "Ringkasan":
+            render_overview(frame, ponds)
+        else:
+            render_pond(frame, page_name)
+
+    page.__name__ = f"harian_page_{unit}"
+    return page

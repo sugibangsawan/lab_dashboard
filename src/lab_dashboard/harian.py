@@ -5,8 +5,17 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from lab_dashboard.data import UNITS, latest_row, load_harian_data, ponds_in_data
-from lab_dashboard.ui import apply_style, comparison_chart, fmt, kpi_card, line_chart, show_chart, status_badge
+from lab_dashboard.data import UNITS, filter_visible_rows, latest_row, load_harian_data, ponds_in_data
+from lab_dashboard.ui import (
+    apply_style,
+    comparison_chart,
+    fmt,
+    kpi_card,
+    line_chart,
+    selected_unit,
+    show_chart,
+    status_badge,
+)
 
 KPI_GROUPS = [
     ("Pakan", [("Pakan Harian", "kg")]),
@@ -108,38 +117,38 @@ def render_pond(frame: pd.DataFrame, pond: str) -> None:
     st.dataframe(table[display_cols], hide_index=True, width="stretch")
 
 
-def make_harian_page(unit: str):
+def harian_page() -> None:
+    unit = selected_unit()
     config = UNITS[unit]
+    apply_style()
+    st.title(config.harian_title)
+    st.caption(config.harian_caption)
 
-    def page() -> None:
-        apply_style()
-        st.title(config.harian_title)
-        st.caption(config.harian_caption)
+    sidebar = st.sidebar
+    sidebar.header("Kolam")
+    if sidebar.button("Muat ulang data", width="stretch", key="reload_harian"):
+        _cached_data.clear()
 
-        sidebar = st.sidebar
-        sidebar.header("Kolam")
-        if sidebar.button("Muat ulang data", width="stretch", key=f"reload_harian_{unit}"):
-            _cached_data.clear()
+    try:
+        frame = filter_visible_rows(_cached_data(unit))
+    except Exception as exc:
+        st.error(f"Gagal mengambil Google Sheet: {exc}")
+        st.stop()
 
-        try:
-            frame = _cached_data(unit)
-        except Exception as exc:
-            st.error(f"Gagal mengambil Google Sheet: {exc}")
-            st.stop()
+    if frame.empty:
+        st.warning("Belum ada data yang bisa ditampilkan untuk tanggal ini.")
+        st.stop()
 
-        ponds = ponds_in_data(frame, unit=unit)
-        growout = [pond for pond in ponds if pond != "Tandon"]
-        latest_date = frame["Tanggal"].max().strftime("%d %b %Y")
-        sidebar.caption(f"Update terakhir di sheet: **{latest_date}**")
-        sidebar.caption(f"{len(frame)} baris · {len(growout)} kolam budidaya")
+    ponds = ponds_in_data(frame, unit=unit)
+    growout = [pond for pond in ponds if pond != "Tandon"]
+    latest_date = frame["Tanggal"].max().strftime("%d %b %Y")
+    sidebar.caption(f"Update terakhir di sheet: **{latest_date}**")
+    sidebar.caption(f"{len(frame)} baris · {len(growout)} kolam budidaya")
 
-        pages = ["Ringkasan"] + ponds
-        page_name = sidebar.radio("Lihat", pages, key=f"harian_page_{unit}")
+    pages = ["Ringkasan"] + ponds
+    page_name = sidebar.radio("Lihat", pages, key=f"harian_page_{unit}")
 
-        if page_name == "Ringkasan":
-            render_overview(frame, ponds)
-        else:
-            render_pond(frame, page_name)
-
-    page.__name__ = f"harian_page_{unit}"
-    return page
+    if page_name == "Ringkasan":
+        render_overview(frame, ponds)
+    else:
+        render_pond(frame, page_name)

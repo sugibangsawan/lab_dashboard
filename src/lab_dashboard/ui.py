@@ -6,7 +6,12 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from lab_dashboard.data import metric_status
+from lab_dashboard.data import UNITS, metric_status
+
+
+def selected_unit() -> str:
+    unit = st.session_state.get("unit", "C")
+    return unit if unit in UNITS else "C"
 
 POND_COLORS = {
     "D2": "#0ea5e9",

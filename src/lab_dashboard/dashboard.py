@@ -5,9 +5,18 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from lab_dashboard.data import UNITS, load_lab_data, latest_row, ponds_in_data
-from lab_dashboard.harian import make_harian_page
-from lab_dashboard.ui import apply_style, comparison_chart, fmt, kpi_card, line_chart, show_chart, status_badge
+from lab_dashboard.data import UNITS, filter_visible_rows, load_lab_data, latest_row, ponds_in_data
+from lab_dashboard.harian import harian_page
+from lab_dashboard.ui import (
+    apply_style,
+    comparison_chart,
+    fmt,
+    kpi_card,
+    line_chart,
+    selected_unit,
+    show_chart,
+    status_badge,
+)
 
 KPI_GROUPS = [
     ("Air", [("pH Pagi", "pH pagi"), ("pH Sore", "pH sore"), ("Salinitas", "ppt"), ("Alkalinitas", "ppm")]),
@@ -101,82 +110,71 @@ def render_pond(frame: pd.DataFrame, pond: str, farm: str = "D") -> None:
     st.dataframe(table[display_cols], hide_index=True, width="stretch")
 
 
-def make_lab_page(unit: str):
+def lab_page() -> None:
+    unit = selected_unit()
     config = UNITS[unit]
+    apply_style()
+    st.title(config.lab_title)
+    st.caption(config.lab_caption)
 
-    def page() -> None:
-        apply_style()
-        st.title(config.lab_title)
-        st.caption(config.lab_caption)
+    sidebar = st.sidebar
+    sidebar.header("Kolam")
+    if sidebar.button("Muat ulang data", width="stretch", key="reload_lab"):
+        _cached_data.clear()
 
-        sidebar = st.sidebar
-        sidebar.header("Kolam")
-        if sidebar.button("Muat ulang data", width="stretch", key=f"reload_lab_{unit}"):
-            _cached_data.clear()
+    try:
+        frame = filter_visible_rows(_cached_data(unit))
+    except Exception as exc:
+        st.error(f"Gagal mengambil Google Sheet: {exc}")
+        st.stop()
 
-        try:
-            frame = _cached_data(unit)
-        except Exception as exc:
-            st.error(f"Gagal mengambil Google Sheet: {exc}")
-            st.stop()
+    if frame.empty:
+        st.warning("Belum ada data yang bisa ditampilkan untuk tanggal ini.")
+        st.stop()
 
-        ponds = ponds_in_data(frame, unit=unit)
-        growout = [pond for pond in ponds if pond != "Tandon"]
-        latest_date = frame["Tanggal"].max().strftime("%d %b %Y")
-        sidebar.caption(f"Update terakhir di sheet: **{latest_date}**")
-        sidebar.caption(f"{len(frame)} baris · {len(growout)} kolam budidaya")
+    ponds = ponds_in_data(frame, unit=unit)
+    growout = [pond for pond in ponds if pond != "Tandon"]
+    latest_date = frame["Tanggal"].max().strftime("%d %b %Y")
+    sidebar.caption(f"Update terakhir di sheet: **{latest_date}**")
+    sidebar.caption(f"{len(frame)} baris · {len(growout)} kolam budidaya")
 
-        pages = ["Ringkasan"] + ponds
-        page_name = sidebar.radio("Lihat", pages, key=f"lab_page_{unit}")
+    pages = ["Ringkasan"] + ponds
+    page_name = sidebar.radio("Lihat", pages, key=f"lab_page_{unit}")
 
-        if page_name == "Ringkasan":
-            render_overview(frame, ponds, farm=unit)
-        else:
-            render_pond(frame, page_name, farm=unit)
-
-    page.__name__ = f"lab_page_{unit}"
-    return page
-
-
-lab_page_d = make_lab_page("D")
-lab_page_c = make_lab_page("C")
-harian_page_d = make_harian_page("D")
-harian_page_c = make_harian_page("C")
+    if page_name == "Ringkasan":
+        render_overview(frame, ponds, farm=unit)
+    else:
+        render_pond(frame, page_name, farm=unit)
 
 
 def run() -> None:
+    with st.sidebar:
+        st.segmented_control(
+            "Unit",
+            options=["C", "D"],
+            default="C",
+            required=True,
+            format_func=lambda unit: f"Unit {unit}",
+            key="unit",
+            width="stretch",
+        )
+
     selected_page = st.navigation(
-        {
-            "Lab Lengkap": [
-                st.Page(
-                    lab_page_c,
-                    title="Unit C",
-                    icon=":material/science:",
-                    url_path="c-lab",
-                    default=True,
-                ),
-                st.Page(
-                    lab_page_d,
-                    title="Unit D",
-                    icon=":material/science:",
-                    url_path="d-lab",
-                ),
-            ],
-            "Lab Harian": [
-                st.Page(
-                    harian_page_c,
-                    title="Unit C",
-                    icon=":material/calendar_today:",
-                    url_path="c-harian",
-                ),
-                st.Page(
-                    harian_page_d,
-                    title="Unit D",
-                    icon=":material/calendar_today:",
-                    url_path="d-harian",
-                ),
-            ],
-        },
+        [
+            st.Page(
+                lab_page,
+                title="Lab Lengkap",
+                icon=":material/science:",
+                url_path="lab",
+                default=True,
+            ),
+            st.Page(
+                harian_page,
+                title="Lab Harian",
+                icon=":material/calendar_today:",
+                url_path="harian",
+            ),
+        ],
         position="top",
     )
     selected_page.run()

@@ -7,6 +7,6 @@ uv sync
 uv run lab-dashboard
 ```
 
-The app opens in the browser. Use the top navigation to switch between **Lab Lengkap** and **Lab Harian**, then Unit C or Unit D. The default view is Unit C lab lengkap. In harian, each pond profile focuses on pakan harian, pH pagi/sore, and kecerahan pagi/sore.
+The app opens in the browser. Use the top navigation to switch between **Lab Lengkap** and **Lab Harian**, and the sidebar to pick **Unit C** (default) or **Unit D**. In harian, each pond profile focuses on pakan harian, pH pagi/sore, and kecerahan pagi/sore.
 
 On Streamlit Community Cloud, set the main file to `main.py` (not a nested `streamlit run`).

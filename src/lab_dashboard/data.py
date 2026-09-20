@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import io
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, time, timedelta
+from zoneinfo import ZoneInfo
 from urllib.request import Request, urlopen
 
 import pandas as pd
@@ -58,6 +59,9 @@ CSV_URL = (
 )
 
 POND_ORDER = list(UNITS["D"].pond_order)
+
+JAKARTA = ZoneInfo("Asia/Jakarta")
+PUBLISH_TODAY_AFTER = time(18, 0)
 
 NUMERIC_COLUMNS = [
     "DOC",
@@ -275,6 +279,30 @@ def _read_unit_sheet(
     keep = ["Tanggal", "Kolam", *numeric_columns]
     frame = frame.loc[:, [column for column in keep if column in frame.columns]]
     return frame.sort_values(["Kolam", "Tanggal"]).reset_index(drop=True)
+
+
+def last_visible_date(now: datetime | None = None) -> datetime:
+    """Latest calendar day that may be shown in Jakarta time.
+
+    Today's rows stay hidden until 18:00 WIB. Future dates are never shown.
+    """
+    if now is None:
+        current = datetime.now(JAKARTA)
+    elif now.tzinfo is None:
+        current = now.replace(tzinfo=JAKARTA)
+    else:
+        current = now.astimezone(JAKARTA)
+    today = current.date()
+    visible = today if current.time() >= PUBLISH_TODAY_AFTER else today - timedelta(days=1)
+    return datetime(visible.year, visible.month, visible.day)
+
+
+def filter_visible_rows(frame: pd.DataFrame, now: datetime | None = None) -> pd.DataFrame:
+    if frame.empty or "Tanggal" not in frame.columns:
+        return frame
+    cutoff = pd.Timestamp(last_visible_date(now))
+    dates = pd.to_datetime(frame["Tanggal"], errors="coerce")
+    return frame.loc[dates.dt.normalize() <= cutoff].copy()
 
 
 def load_lab_data(csv_text: str | None = None, unit: str = "D") -> pd.DataFrame:

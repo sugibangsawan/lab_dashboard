@@ -92,13 +92,39 @@ def _daily_frame(frame: pd.DataFrame, value_columns: list[str], *, extra: str | 
     return long
 
 
-def _date_x_encoding() -> alt.X:
+PH_METRICS = frozenset({"pH Pagi", "pH Sore"})
+PH_Y_SCALE = alt.Scale(domain=[7, 9], nice=False, zero=False)
+
+
+def _date_ticks(data: pd.DataFrame, max_labels: int = 12) -> list[str]:
+    ordered = sorted(data["Urutan"].dropna().unique())
+    if len(ordered) <= max_labels:
+        return list(ordered)
+    indexes = [
+        round(index * (len(ordered) - 1) / (max_labels - 1))
+        for index in range(max_labels)
+    ]
+    return list(dict.fromkeys(ordered[index] for index in indexes))
+
+
+def _date_x_encoding(data: pd.DataFrame) -> alt.X:
     return alt.X(
-        "Hari:N",
+        "Urutan:O",
         title=None,
-        sort=alt.EncodingSortField(field="Urutan", op="min", order="ascending"),
-        axis=alt.Axis(labelAngle=0, labelOverlap=False),
+        sort="ascending",
+        axis=alt.Axis(
+            labelAngle=0,
+            labelOverlap=True,
+            values=_date_ticks(data),
+            labelExpr="timeFormat(toDate(datum.value), '%d %b')",
+        ),
     )
+
+
+def _value_y_encoding(title: str | None, metrics: list[str]) -> alt.Y:
+    if metrics and set(metrics) <= PH_METRICS:
+        return alt.Y("Value:Q", title=title, scale=PH_Y_SCALE)
+    return alt.Y("Value:Q", title=title)
 
 
 def show_chart(chart: alt.Chart) -> None:
@@ -108,13 +134,18 @@ def show_chart(chart: alt.Chart) -> None:
 def line_chart(frame: pd.DataFrame, columns: list[str], title: str, y_title: str) -> alt.Chart:
     data = _daily_frame(frame, columns)
     if data.empty:
-        return alt.Chart(pd.DataFrame({"Hari": [], "Value": []})).mark_line().encode(x="Hari:N", y="Value:Q").properties(title=title, height=360)
+        return (
+            alt.Chart(pd.DataFrame({"Hari": [], "Value": []}))
+            .mark_line()
+            .encode(x="Hari:N", y=_value_y_encoding(y_title, columns))
+            .properties(title=title, height=360)
+        )
     return (
         alt.Chart(data)
         .mark_line(point=True)
         .encode(
-            x=_date_x_encoding(),
-            y=alt.Y("Value:Q", title=y_title),
+            x=_date_x_encoding(data),
+            y=_value_y_encoding(y_title, columns),
             color=alt.Color("Metric:N", title=None, legend=alt.Legend(orient="top")),
             tooltip=[
                 alt.Tooltip("Tanggal:T", title="Tanggal", format="%d %b %Y"),
@@ -130,14 +161,19 @@ def comparison_chart(frame: pd.DataFrame, column: str, ponds: list[str]) -> alt.
     data = _daily_frame(frame, [column], extra="Kolam")
     data = data.loc[data["Kolam"].isin(ponds)]
     if data.empty:
-        return alt.Chart(pd.DataFrame({"Hari": [], "Value": []})).mark_line().encode(x="Hari:N", y="Value:Q").properties(title=column, height=340)
+        return (
+            alt.Chart(pd.DataFrame({"Hari": [], "Value": []}))
+            .mark_line()
+            .encode(x="Hari:N", y=_value_y_encoding(None, [column]))
+            .properties(title=column, height=340)
+        )
     present = [pond for pond in ponds if pond in set(data["Kolam"])]
     return (
         alt.Chart(data)
         .mark_line(point=True)
         .encode(
-            x=_date_x_encoding(),
-            y=alt.Y("Value:Q", title=None),
+            x=_date_x_encoding(data),
+            y=_value_y_encoding(None, [column]),
             color=alt.Color(
                 "Kolam:N",
                 title=None,

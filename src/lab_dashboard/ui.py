@@ -13,6 +13,17 @@ def selected_unit() -> str:
     unit = st.session_state.get("unit", "C")
     return unit if unit in UNITS else "C"
 
+PLANKTON_GROUP_COLORS = {
+    "Green Algae": "#22c55e",
+    "Blue Green Algae": "#0ea5e9",
+    "Diatom": "#a16207",
+    "Golden Green Algae": "#eab308",
+    "Euglenophyta": "#84cc16",
+    "Dinoflagellata": "#ef4444",
+    "Protozoa": "#a855f7",
+    "Zooplankton": "#6366f1",
+}
+
 POND_COLORS = {
     "D2": "#0ea5e9",
     "D3": "#22c55e",
@@ -121,9 +132,29 @@ def _date_x_encoding(data: pd.DataFrame) -> alt.X:
     )
 
 
-def _value_y_encoding(title: str | None, metrics: list[str]) -> alt.Y:
+PERCENT_Y_SCALE = alt.Scale(domain=[0, 100], nice=False, zero=True)
+
+
+def _count_y_encoding(title: str | None, *, stack: str | None = None) -> alt.Y:
+    return alt.Y(
+        "Value:Q",
+        title=title,
+        stack=stack,
+        scale=alt.Scale(zero=True, nice=True),
+        axis=alt.Axis(format=",.0f"),
+    )
+
+
+def _value_y_encoding(title: str | None, metrics: list[str], *, stack: str | None = None) -> alt.Y:
     if metrics and set(metrics) <= PH_METRICS:
         return alt.Y("Value:Q", title=title, scale=PH_Y_SCALE)
+    if metrics and all(metric.endswith(" %") for metric in metrics):
+        return alt.Y("Value:Q", title=title, scale=PERCENT_Y_SCALE)
+    if metrics and (
+        metrics == ["Total Plankton"]
+        or (stack is not None and not any(metric.endswith(" %") for metric in metrics))
+    ):
+        return _count_y_encoding(title, stack=stack)
     return alt.Y("Value:Q", title=title)
 
 
@@ -150,7 +181,7 @@ def line_chart(frame: pd.DataFrame, columns: list[str], title: str, y_title: str
             tooltip=[
                 alt.Tooltip("Tanggal:T", title="Tanggal", format="%d %b %Y"),
                 alt.Tooltip("Metric:N", title=""),
-                alt.Tooltip("Value:Q", title=y_title),
+                alt.Tooltip("Value:Q", title=y_title, format=",.0f"),
             ],
         )
         .properties(title=title, height=360)
@@ -186,11 +217,95 @@ def comparison_chart(frame: pd.DataFrame, column: str, ponds: list[str]) -> alt.
             tooltip=[
                 alt.Tooltip("Kolam:N"),
                 alt.Tooltip("Tanggal:T", title="Tanggal", format="%d %b %Y"),
-                alt.Tooltip("Value:Q", title=column),
+                alt.Tooltip("Value:Q", title=column, format=",.0f"),
             ],
         )
         .properties(title=column, height=340)
     )
+
+
+def stacked_area_chart(frame: pd.DataFrame, columns: list[str], title: str, y_title: str) -> alt.Chart:
+    data = _daily_frame(frame, columns)
+    if data.empty:
+        return (
+            alt.Chart(pd.DataFrame({"Hari": [], "Value": []}))
+            .mark_area()
+            .encode(x="Hari:N", y=_count_y_encoding(y_title, stack="zero"))
+            .properties(title=title, height=380)
+        )
+    present = [column for column in columns if column in set(data["Metric"])]
+    rank = {name: index for index, name in enumerate(columns)}
+    data["UrutanKelompok"] = data["Metric"].map(rank)
+    return (
+        alt.Chart(data)
+        .mark_area(opacity=0.9, line=True)
+        .encode(
+            x=_date_x_encoding(data),
+            y=_count_y_encoding(y_title, stack="zero"),
+            color=alt.Color(
+                "Metric:N",
+                title=None,
+                scale=alt.Scale(
+                    domain=present,
+                    range=[PLANKTON_GROUP_COLORS.get(column, "#334155") for column in present],
+                ),
+                legend=alt.Legend(orient="top", columns=4),
+            ),
+            order=alt.Order("UrutanKelompok:Q", sort="ascending"),
+            tooltip=[
+                alt.Tooltip("Tanggal:T", title="Tanggal", format="%d %b %Y"),
+                alt.Tooltip("Metric:N", title="Kelompok"),
+                alt.Tooltip("Value:Q", title=y_title, format=",.0f"),
+            ],
+        )
+        .properties(title=title, height=380)
+    )
+
+
+def latest_bar_chart(frame: pd.DataFrame, column: str, ponds: list[str], title: str) -> alt.Chart:
+    subset = frame.loc[frame["Kolam"].isin(ponds), ["Kolam", "Tanggal", column]].dropna(subset=[column])
+    if subset.empty:
+        return (
+            alt.Chart(pd.DataFrame({"Kolam": [], "Value": []}))
+            .mark_bar()
+            .encode(x="Kolam:N", y=_count_y_encoding("sel"))
+            .properties(title=title, height=320)
+        )
+    latest_index = subset.groupby("Kolam")["Tanggal"].idxmax()
+    data = subset.loc[latest_index].rename(columns={column: "Value"})
+    present = [pond for pond in ponds if pond in set(data["Kolam"])]
+    bars = (
+        alt.Chart(data)
+        .mark_bar()
+        .encode(
+            x=alt.X("Kolam:N", title=None, sort=present),
+            y=_count_y_encoding("sel"),
+            color=alt.Color(
+                "Kolam:N",
+                title=None,
+                scale=alt.Scale(
+                    domain=present,
+                    range=[POND_COLORS.get(pond, "#334155") for pond in present],
+                ),
+                legend=None,
+            ),
+            tooltip=[
+                alt.Tooltip("Kolam:N"),
+                alt.Tooltip("Tanggal:T", title="Tanggal", format="%d %b %Y"),
+                alt.Tooltip("Value:Q", title=column, format=",.0f"),
+            ],
+        )
+    )
+    labels = (
+        alt.Chart(data)
+        .mark_text(dy=-8, fontSize=11)
+        .encode(
+            x=alt.X("Kolam:N", sort=present),
+            y=alt.Y("Value:Q"),
+            text=alt.Text("Value:Q", format=",.0f"),
+        )
+    )
+    return (bars + labels).properties(title=title, height=320)
 
 
 def status_badge(column: str, value: object, farm: str = "D") -> str:

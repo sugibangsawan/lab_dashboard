@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import re
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
@@ -22,6 +23,9 @@ class UnitConfig:
     harian_title: str
     lab_caption: str
     harian_caption: str
+    plankton_gid: str | None = None
+    plankton_title: str = ""
+    plankton_caption: str = ""
 
 
 UNITS: dict[str, UnitConfig] = {
@@ -46,6 +50,9 @@ UNITS: dict[str, UnitConfig] = {
         harian_title="Lab Harian Unit C",
         lab_caption="Data live dari sheet **Lengkap C** · Lab Lengkap Unit C Periode Tebar September 2026",
         harian_caption="Data live dari sheet **Harian C** · Pakan, pH, dan kecerahan per kolam",
+        plankton_gid="1667289652",
+        plankton_title="Lab Plankton Unit C",
+        plankton_caption="Data live dari sheet **Plankton C** · Kelimpahan dan komposisi plankton per kolam",
     ),
 }
 
@@ -102,6 +109,34 @@ HARIAN_FOCUS_COLUMNS = [
     "Kecerahan Sore",
 ]
 
+PLANKTON_COUNT_COLUMNS = [
+    "Green Algae",
+    "Blue Green Algae",
+    "Diatom",
+    "Golden Green Algae",
+    "Euglenophyta",
+    "Dinoflagellata",
+    "Protozoa",
+    "Zooplankton",
+    "Total Plankton",
+]
+
+PLANKTON_PERCENT_COLUMNS = [f"{column} %" for column in PLANKTON_COUNT_COLUMNS[:-1]]
+
+PLANKTON_SHEET_COUNTS = {
+    "∑Green Algae (GA)": "Green Algae",
+    "∑Blue Green Algae (BGA)": "Blue Green Algae",
+    "∑Diatom": "Diatom",
+    "Golden Green Algae (GGA)": "Golden Green Algae",
+    "Euglenophyta": "Euglenophyta",
+    "∑Dinoflagellata": "Dinoflagellata",
+    "∑Protozoa": "Protozoa",
+    "∑Zooplankton": "Zooplankton",
+    "Total Plankton": "Total Plankton",
+}
+
+_THOUSANDS = re.compile(r"^\d{1,3}(?:\.\d{3})+$")
+
 # Typical vannamei pond guidance used only for dashboard coloring.
 THRESHOLDS: dict[str, dict[str, float]] = {
     "pH Pagi": {"low": 7.5, "high": 8.5, "warn_low": 7.3, "warn_high": 8.7},
@@ -155,6 +190,47 @@ def _unit(unit: str) -> UnitConfig:
         return UNITS[unit]
     except KeyError as exc:
         raise ValueError(f"Unknown unit {unit!r}. Expected one of {sorted(UNITS)}.") from exc
+
+
+def _to_plankton_count(value: object) -> float | None:
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return None
+    text = str(value).strip()
+    if not text or text.upper() in {"-", "—", "N/A", "NA", "TD"}:
+        return None
+    if _THOUSANDS.match(text):
+        return float(text.replace(".", ""))
+    parsed = _to_number(text)
+    if parsed is None:
+        return None
+    if parsed == 0:
+        return 0.0
+    # Early rows write 10 / 22.5 for 10.000 / 22.500 cells.
+    if parsed < 1000:
+        return parsed * 1000
+    return parsed
+
+
+def _rename_plankton_columns(frame: pd.DataFrame) -> pd.DataFrame:
+    renamed: list[str] = []
+    columns = list(frame.columns)
+    index = 0
+    while index < len(columns):
+        column = columns[index]
+        name = PLANKTON_SHEET_COUNTS.get(column)
+        if name:
+            renamed.append(name)
+            nxt = columns[index + 1] if index + 1 < len(columns) else ""
+            if name != "Total Plankton" and str(nxt).startswith("%"):
+                renamed.append(f"{name} %")
+                index += 2
+                continue
+            index += 1
+            continue
+        renamed.append(column)
+        index += 1
+    frame.columns = renamed
+    return frame
 
 
 def _to_number(value: object) -> float | None:
@@ -314,6 +390,41 @@ def load_lab_data(csv_text: str | None = None, unit: str = "D") -> pd.DataFrame:
     )
     measured = [column for column in NUMERIC_COLUMNS if column != "DOC"]
     return _read_unit_sheet(raw, NUMERIC_COLUMNS, measured)
+
+
+def load_plankton_data(csv_text: str | None = None, unit: str = "C") -> pd.DataFrame:
+    config = _unit(unit)
+    if not config.plankton_gid:
+        return pd.DataFrame(columns=["Tanggal", "Kolam", *PLANKTON_COUNT_COLUMNS, *PLANKTON_PERCENT_COLUMNS])
+    raw = (
+        csv_text
+        if csv_text is not None
+        else fetch_sheet_csv(gid=config.plankton_gid, sheet_id=config.sheet_id)
+    )
+    frame = _parse_csv_with_header(raw)
+    frame = frame.loc[:, ~frame.columns.str.match(r"^Unnamed")]
+    frame = _rename_plankton_columns(frame)
+
+    frame["Kolam"] = frame["Kolam"].map(_normalize_pond)
+    frame["Tanggal"] = frame["Tanggal"].map(_parse_date)
+    frame = frame.dropna(subset=["Tanggal", "Kolam"])
+
+    for column in PLANKTON_COUNT_COLUMNS:
+        if column in frame.columns:
+            frame[column] = frame[column].map(_to_plankton_count)
+        else:
+            frame[column] = pd.NA
+    for column in PLANKTON_PERCENT_COLUMNS:
+        if column in frame.columns:
+            frame[column] = frame[column].map(_to_number)
+        else:
+            frame[column] = pd.NA
+
+    has_values = frame[PLANKTON_COUNT_COLUMNS].notna().any(axis=1)
+    frame = frame.loc[has_values].copy()
+    keep = ["Tanggal", "Kolam", *PLANKTON_COUNT_COLUMNS, *PLANKTON_PERCENT_COLUMNS]
+    frame = frame.loc[:, keep]
+    return frame.sort_values(["Kolam", "Tanggal"]).reset_index(drop=True)
 
 
 def load_harian_data(csv_text: str | None = None, unit: str = "D") -> pd.DataFrame:

@@ -7,6 +7,7 @@ import streamlit as st
 
 from lab_dashboard.data import UNITS, filter_visible_rows, load_lab_data, latest_row, ponds_in_data
 from lab_dashboard.harian import harian_page
+from lab_dashboard.plankton import plankton_page
 from lab_dashboard.ui import (
     apply_style,
     comparison_chart,
@@ -173,6 +174,12 @@ def run() -> None:
                 title="Lab Harian",
                 icon=":material/calendar_today:",
                 url_path="harian",
+            ),
+            st.Page(
+                plankton_page,
+                title="Lab Plankton",
+                icon=":material/biotech:",
+                url_path="plankton",
             ),
         ],
         position="top",

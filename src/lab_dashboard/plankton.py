@@ -20,6 +20,9 @@ from lab_dashboard.ui import (
     kpi_card,
     latest_bar_chart,
     line_chart,
+    CARD_GAP,
+    SECTION_GAP,
+    section_heading,
     selected_unit,
     show_chart,
     stacked_area_chart,
@@ -99,9 +102,9 @@ def render_pond(frame: pd.DataFrame, pond: str) -> None:
         f"{first['Tanggal'].strftime('%d %b')} – {latest['Tanggal'].strftime('%d %b')}",
     )
 
-    for title, metrics in KPI_GROUPS:
-        with st.container(gap=24):
-            st.markdown(f"**{title}**")
+    with st.container(gap=SECTION_GAP):
+        for index, (title, metrics) in enumerate(KPI_GROUPS):
+            section_heading(title, spaced=index > 0)
             if title == "Kelimpahan":
                 total = latest.get("Total Plankton")
                 previous = subset.iloc[-2].get("Total Plankton") if len(subset) >= 2 else None
@@ -115,9 +118,13 @@ def render_pond(frame: pd.DataFrame, pond: str) -> None:
                     border=True,
                     icon=":material/biotech:",
                 )
-            for start in range(0, len(metrics), 4):
+                st.space(CARD_GAP)
+            starts = list(range(0, len(metrics), 4))
+            for index, start in enumerate(starts):
+                if index:
+                    st.space(CARD_GAP)
                 chunk = metrics[start : start + 4]
-                cols = st.columns(4, gap=24)
+                cols = st.columns(4, gap=CARD_GAP)
                 for col, (name, unit) in zip(cols, chunk):
                     with col:
                         kpi_card(name, latest.get(name), unit, name)

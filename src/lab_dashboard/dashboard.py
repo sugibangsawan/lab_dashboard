@@ -14,6 +14,9 @@ from lab_dashboard.ui import (
     fmt,
     kpi_card,
     line_chart,
+    CARD_GAP,
+    SECTION_GAP,
+    section_heading,
     selected_unit,
     show_chart,
     status_badge,
@@ -77,12 +80,13 @@ def render_pond(frame: pd.DataFrame, pond: str, farm: str = "D") -> None:
         f"{first['Tanggal'].strftime('%d %b')} – {latest['Tanggal'].strftime('%d %b')}",
     )
 
-    for title, metrics in KPI_GROUPS:
-        st.markdown(f"**{title}**")
-        cols = st.columns(len(metrics))
-        for col, (name, unit) in zip(cols, metrics, strict=True):
-            with col:
-                kpi_card(name, latest.get(name), unit, name, farm=farm)
+    with st.container(gap=SECTION_GAP):
+        for index, (title, metrics) in enumerate(KPI_GROUPS):
+            section_heading(title, spaced=index > 0)
+            cols = st.columns(len(metrics), gap=CARD_GAP)
+            for col, (name, unit) in zip(cols, metrics, strict=True):
+                with col:
+                    kpi_card(name, latest.get(name), unit, name, farm=farm)
 
     st.markdown("")
     if farm != "C":

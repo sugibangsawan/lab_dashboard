@@ -13,6 +13,19 @@ def selected_unit() -> str:
     unit = st.session_state.get("unit", "C")
     return unit if unit in UNITS else "C"
 
+
+SECTION_GAP = 12
+TITLE_TOP = 16
+TITLE_GAP = 12
+CARD_GAP = 16
+
+
+def section_heading(title: str, *, spaced: bool = False) -> None:
+    if spaced:
+        st.space(TITLE_TOP)
+    st.markdown(f"**{title}**")
+    st.space(TITLE_GAP)
+
 PLANKTON_GROUP_COLORS = {
     "Green Algae": "#22c55e",
     "Blue Green Algae": "#0ea5e9",
@@ -236,7 +249,7 @@ def stacked_area_chart(frame: pd.DataFrame, columns: list[str], title: str, y_ti
     present = [column for column in columns if column in set(data["Metric"])]
     rank = {name: index for index, name in enumerate(columns)}
     data["UrutanKelompok"] = data["Metric"].map(rank)
-    return (
+    areas = (
         alt.Chart(data)
         .mark_area(opacity=0.9, line=True)
         .encode(
@@ -258,8 +271,29 @@ def stacked_area_chart(frame: pd.DataFrame, columns: list[str], title: str, y_ti
                 alt.Tooltip("Value:Q", title=y_title, format=",.0f"),
             ],
         )
-        .properties(title=title, height=380)
     )
+    if "Total Plankton" in frame.columns:
+        totals = _daily_frame(frame, ["Total Plankton"]).rename(columns={"Value": "Total"})
+    else:
+        totals = (
+            data.groupby(["Urutan", "Tanggal", "Hari"], as_index=False)["Value"]
+            .sum()
+            .rename(columns={"Value": "Total"})
+        )
+    labels = (
+        alt.Chart(totals)
+        .mark_text(align="center", baseline="bottom", dy=-8, fontSize=11, fontWeight=600)
+        .encode(
+            x=_date_x_encoding(totals),
+            y=alt.Y("Total:Q"),
+            text=alt.Text("Total:Q", format=",.0f"),
+            tooltip=[
+                alt.Tooltip("Tanggal:T", title="Tanggal", format="%d %b %Y"),
+                alt.Tooltip("Total:Q", title="Total", format=",.0f"),
+            ],
+        )
+    )
+    return alt.layer(areas, labels).properties(title=title, height=380)
 
 
 def latest_bar_chart(frame: pd.DataFrame, column: str, ponds: list[str], title: str) -> alt.Chart:

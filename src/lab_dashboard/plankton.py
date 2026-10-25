@@ -137,7 +137,6 @@ def render_pond(frame: pd.DataFrame, pond: str) -> None:
             "sel",
         )
     )
-    show_chart(line_chart(subset, GROUP_COLUMNS, "Plankton", "sel"))
     show_chart(
         line_chart(
             subset,

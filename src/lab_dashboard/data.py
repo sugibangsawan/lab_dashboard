@@ -29,6 +29,20 @@ class UnitConfig:
 
 
 UNITS: dict[str, UnitConfig] = {
+    "B": UnitConfig(
+        key="B",
+        sheet_id="13UU3WfwOiLPtG2ZgP4nNLpQT0xL0JdkcWS80YEDY85k",
+        lab_gid="399696791",
+        harian_gid="773934218",
+        pond_order=("B1", "B2", "B3", "B5", "B6", "B7a", "B7b", "B8", "B9", "B10", "Tandon"),
+        lab_title="Lab Data Lengkap Unit B",
+        harian_title="Lab Harian Unit B",
+        lab_caption="Data live dari sheet **Lengkap B** · Lab Lengkap Unit B Periode Tebar Oktober 2026",
+        harian_caption="Data live dari sheet **Harian B** · Pakan, pH, dan kecerahan per kolam",
+        plankton_gid="1824623225",
+        plankton_title="Lab Plankton Unit B",
+        plankton_caption="Data live dari sheet **Plankton B** · Kelimpahan dan komposisi plankton per kolam",
+    ),
     "D": UnitConfig(
         key="D",
         sheet_id="1Ge2ghdKDu6Q6AcbCIB71tIzdYvpvAE0eDUrvTtxWWfM",
@@ -156,12 +170,15 @@ THRESHOLDS: dict[str, dict[str, float]] = {
     "Diff Kecerahan": {"low": -10, "high": 10, "warn_low": -15, "warn_high": 15},
 }
 
+_BC_THRESHOLDS: dict[str, dict[str, float]] = {
+    "Vibrio Total": {"high": 1000},
+    "Vibrio Hijau": {"high": 100, "warn_high": 1000},
+    "Vibrio Kuning": {"high": 1000},
+}
+
 UNIT_THRESHOLDS: dict[str, dict[str, dict[str, float]]] = {
-    "C": {
-        "Vibrio Total": {"high": 1000},
-        "Vibrio Hijau": {"high": 100, "warn_high": 1000},
-        "Vibrio Kuning": {"high": 1000},
-    }
+    "B": _BC_THRESHOLDS,
+    "C": _BC_THRESHOLDS,
 }
 
 

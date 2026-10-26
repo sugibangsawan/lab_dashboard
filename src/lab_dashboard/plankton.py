@@ -1,4 +1,4 @@
-"""Plankton dashboard for Unit C from sheet Plankton C."""
+"""Plankton dashboard for units that publish a plankton sheet."""
 
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ KPI_GROUPS = [
 ]
 
 
-@st.cache_data(ttl=120, max_entries=4, refresh_mode="background", show_spinner="Mengambil data plankton...")
+@st.cache_data(ttl=120, max_entries=8, refresh_mode="background", show_spinner="Mengambil data plankton...")
 def _cached_data(unit: str) -> pd.DataFrame:
     return load_plankton_data(unit=unit)
 
@@ -157,12 +157,11 @@ def plankton_page() -> None:
     unit = selected_unit()
     apply_style()
 
-    if unit != "C":
-        st.title("Lab Plankton")
-        st.info("Lab Plankton saat ini hanya tersedia untuk Unit C (sheet **Plankton C**).")
-        return
-
     config = UNITS[unit]
+    if not config.plankton_gid:
+        st.title("Lab Plankton")
+        st.info(f"Lab Plankton belum tersedia untuk Unit {unit}.")
+        return
     st.title(config.plankton_title)
     st.caption(config.plankton_caption)
 

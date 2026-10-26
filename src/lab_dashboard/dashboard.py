@@ -89,7 +89,7 @@ def render_pond(frame: pd.DataFrame, pond: str, farm: str = "D") -> None:
                     kpi_card(name, latest.get(name), unit, name, farm=farm)
 
     st.markdown("")
-    if farm != "C":
+    if farm not in {"B", "C"}:
         show_chart(line_chart(subset, ["pH Pagi", "pH Sore"], "pH pagi & sore", "pH"))
         show_chart(line_chart(subset, ["Salinitas"], "Salinitas", "ppt"))
     show_chart(line_chart(subset, ["TOM"], "TOM", "ppm"))
@@ -156,7 +156,7 @@ def run() -> None:
     with st.sidebar:
         st.segmented_control(
             "Unit",
-            options=["C", "D"],
+            options=["B", "C", "D"],
             default="C",
             required=True,
             format_func=lambda unit: f"Unit {unit}",

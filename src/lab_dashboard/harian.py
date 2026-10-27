@@ -27,12 +27,16 @@ KPI_GROUPS = [
 ]
 
 
-@st.cache_data(ttl=120, max_entries=8, refresh_mode="background", show_spinner="Mengambil data harian (pH & kecerahan)...")
+@st.cache_data(ttl=120, max_entries=8, refresh_mode="background", show_spinner="Mengambil data harian...")
 def _cached_data(unit: str) -> pd.DataFrame:
     return load_harian_data(unit=unit)
 
 
-def render_overview(frame: pd.DataFrame, ponds: list[str]) -> None:
+def _shows_salinitas(unit: str) -> bool:
+    return unit in {"B", "C"}
+
+
+def render_overview(frame: pd.DataFrame, ponds: list[str], unit: str) -> None:
     st.subheader("Profil kolam")
     cards = st.columns(len(ponds))
     for column, pond in zip(cards, ponds, strict=True):
@@ -59,13 +63,15 @@ def render_overview(frame: pd.DataFrame, ponds: list[str]) -> None:
     show_chart(comparison_chart(frame, "Pakan Harian", ponds))
     show_chart(comparison_chart(frame, "pH Pagi", ponds))
     show_chart(comparison_chart(frame, "pH Sore", ponds))
+    if _shows_salinitas(unit):
+        show_chart(comparison_chart(frame, "Salinitas", ponds))
     show_chart(comparison_chart(frame, "Kecerahan Pagi", ponds))
     show_chart(comparison_chart(frame, "Kecerahan Sore", ponds))
     show_chart(comparison_chart(frame, "Diff pH", ponds))
     show_chart(comparison_chart(frame, "Diff Kecerahan", ponds))
 
 
-def render_pond(frame: pd.DataFrame, pond: str) -> None:
+def render_pond(frame: pd.DataFrame, pond: str, unit: str) -> None:
     subset = frame.loc[frame["Kolam"] == pond].copy()
     if subset.empty:
         st.warning(f"Belum ada data untuk kolam {pond}.")
@@ -87,13 +93,15 @@ def render_pond(frame: pd.DataFrame, pond: str) -> None:
         for index, (title, metrics) in enumerate(KPI_GROUPS):
             section_heading(title, spaced=index > 0)
             cols = st.columns(len(metrics), gap=CARD_GAP)
-            for col, (name, unit) in zip(cols, metrics, strict=True):
+            for col, (name, metric_unit) in zip(cols, metrics, strict=True):
                 with col:
-                    kpi_card(name, latest.get(name), unit, name)
+                    kpi_card(name, latest.get(name), metric_unit, name)
 
     st.markdown("")
     show_chart(line_chart(subset, ["Pakan Harian"], "Pakan harian", "kg"))
     show_chart(line_chart(subset, ["pH Pagi", "pH Sore"], "pH pagi & sore", "pH"))
+    if _shows_salinitas(unit):
+        show_chart(line_chart(subset, ["Salinitas"], "Salinitas", "ppt"))
     show_chart(line_chart(subset, ["Diff pH"], "Diff pH (sore − pagi)", "Δ pH"))
     show_chart(
         line_chart(
@@ -117,6 +125,9 @@ def render_pond(frame: pd.DataFrame, pond: str) -> None:
     display_cols = ["Tanggal", "DOC"] + [
         col for _, metrics in KPI_GROUPS for col, _ in metrics if col in table.columns
     ]
+    if _shows_salinitas(unit) and "Salinitas" in table.columns:
+        insert_at = display_cols.index("Diff pH") + 1 if "Diff pH" in display_cols else len(display_cols)
+        display_cols.insert(insert_at, "Salinitas")
     st.subheader("Riwayat harian")
     st.dataframe(table[display_cols], hide_index=True, width="stretch")
 
@@ -153,6 +164,6 @@ def harian_page() -> None:
     page_name = sidebar.radio("Lihat", pages, key=f"harian_page_{unit}")
 
     if page_name == "Ringkasan":
-        render_overview(frame, ponds)
+        render_overview(frame, ponds, unit)
     else:
-        render_pond(frame, page_name)
+        render_pond(frame, page_name, unit)

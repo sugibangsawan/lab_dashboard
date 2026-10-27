@@ -111,6 +111,7 @@ HARIAN_NUMERIC_COLUMNS = [
     "Pakan Harian",
     "pH Pagi",
     "pH Sore",
+    "Salinitas",
     "Kecerahan Pagi",
     "Kecerahan Sore",
 ]

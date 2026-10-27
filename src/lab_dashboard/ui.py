@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import altair as alt
 import pandas as pd
 import streamlit as st
@@ -128,6 +130,36 @@ def _daily_frame(frame: pd.DataFrame, value_columns: list[str], *, extra: str | 
 
 PH_METRICS = frozenset({"pH Pagi", "pH Sore"})
 PH_Y_SCALE = alt.Scale(domain=[7, 9], nice=False, zero=False)
+SALINITY_FOCUS = (20, 40)
+
+
+def _salinity_domain(values: pd.Series | None) -> list[int]:
+    """Tight ppt axis around the plotted salinity, inside 20–40 unless data leaves it."""
+    numbers = (
+        pd.to_numeric(values, errors="coerce").dropna()
+        if values is not None
+        else pd.Series(dtype=float)
+    )
+    if numbers.empty:
+        return [SALINITY_FOCUS[0], SALINITY_FOCUS[1]]
+    low = float(numbers.min())
+    high = float(numbers.max())
+    domain_min = math.floor(low) - 1
+    domain_max = math.ceil(high) + 1
+    if domain_max - domain_min < 4:
+        spare = 4 - (domain_max - domain_min)
+        domain_min -= spare // 2
+        domain_max += spare - spare // 2
+    if low >= SALINITY_FOCUS[0]:
+        domain_min = max(domain_min, SALINITY_FOCUS[0])
+    if high <= SALINITY_FOCUS[1]:
+        domain_max = min(domain_max, SALINITY_FOCUS[1])
+    if domain_max - domain_min < 2:
+        if domain_min <= SALINITY_FOCUS[0]:
+            domain_max = domain_min + 2
+        else:
+            domain_min = domain_max - 2
+    return [int(domain_min), int(domain_max)]
 
 
 def _date_ticks(data: pd.DataFrame, max_labels: int = 12) -> list[str]:
@@ -168,7 +200,20 @@ def _count_y_encoding(title: str | None, *, stack: str | None = None) -> alt.Y:
     )
 
 
-def _value_y_encoding(title: str | None, metrics: list[str], *, stack: str | None = None) -> alt.Y:
+def _value_y_encoding(
+    title: str | None,
+    metrics: list[str],
+    *,
+    stack: str | None = None,
+    values: pd.Series | None = None,
+) -> alt.Y:
+    if metrics == ["Salinitas"]:
+        return alt.Y(
+            "Value:Q",
+            title=title,
+            scale=alt.Scale(domain=_salinity_domain(values), nice=False, zero=False),
+            axis=alt.Axis(format="d", tickMinStep=1),
+        )
     if metrics and set(metrics) <= PH_METRICS:
         return alt.Y("Value:Q", title=title, scale=PH_Y_SCALE)
     if metrics and all(metric.endswith(" %") for metric in metrics):
@@ -199,7 +244,7 @@ def line_chart(frame: pd.DataFrame, columns: list[str], title: str, y_title: str
         .mark_line(point=True)
         .encode(
             x=_date_x_encoding(data),
-            y=_value_y_encoding(y_title, columns),
+            y=_value_y_encoding(y_title, columns, values=data["Value"]),
             color=alt.Color("Metric:N", title=None, legend=alt.Legend(orient="top")),
             tooltip=[
                 alt.Tooltip("Tanggal:T", title="Tanggal", format="%d %b %Y"),
@@ -227,7 +272,7 @@ def comparison_chart(frame: pd.DataFrame, column: str, ponds: list[str]) -> alt.
         .mark_line(point=True)
         .encode(
             x=_date_x_encoding(data),
-            y=_value_y_encoding(None, [column]),
+            y=_value_y_encoding(None, [column], values=data["Value"]),
             color=alt.Color(
                 "Kolam:N",
                 title=None,

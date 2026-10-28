@@ -13,6 +13,7 @@ from lab_dashboard.ui import (
     comparison_chart,
     fmt,
     kpi_card,
+    VIBRIO_COLORS,
     line_chart,
     CARD_GAP,
     SECTION_GAP,
@@ -94,14 +95,13 @@ def render_pond(frame: pd.DataFrame, pond: str, farm: str = "D") -> None:
         show_chart(line_chart(subset, ["Salinitas"], "Salinitas", "ppt"))
     show_chart(line_chart(subset, ["TOM"], "TOM", "ppm"))
     show_chart(line_chart(subset, ["NH4", "NH3", "NO2", "PO4"], "NH4, NH3, NO2, PO4", "ppm"))
-    show_chart(
-        line_chart(
-            subset,
-            ["Vibrio Hijau", "Vibrio Kuning", "Swanella", "Vibrio Total"],
-            "Vibrio",
-            "CFU",
-        )
-    )
+    vibrio_metrics = ["Vibrio Hijau", "Vibrio Kuning", "Swanella"]
+    vibrio_colors = None
+    if farm in {"B", "C"}:
+        vibrio_colors = VIBRIO_COLORS
+    else:
+        vibrio_metrics.append("Vibrio Total")
+    show_chart(line_chart(subset, vibrio_metrics, "Vibrio", "CFU", colors=vibrio_colors))
 
     table = subset.drop(columns=["Kolam"]).copy()
     table["Tanggal"] = table["Tanggal"].dt.strftime("%d %b %Y")

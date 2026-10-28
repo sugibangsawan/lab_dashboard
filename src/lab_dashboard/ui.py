@@ -28,6 +28,12 @@ def section_heading(title: str, *, spaced: bool = False) -> None:
     st.markdown(f"**{title}**")
     st.space(TITLE_GAP)
 
+VIBRIO_COLORS = {
+    "Vibrio Hijau": "#39FF14",
+    "Vibrio Kuning": "#F5C400",
+    "Swanella": "#111111",
+}
+
 PLANKTON_GROUP_COLORS = {
     "Green Algae": "#22c55e",
     "Blue Green Algae": "#0ea5e9",
@@ -230,7 +236,13 @@ def show_chart(chart: alt.Chart) -> None:
     st.altair_chart(chart, width="stretch")
 
 
-def line_chart(frame: pd.DataFrame, columns: list[str], title: str, y_title: str) -> alt.Chart:
+def line_chart(
+    frame: pd.DataFrame,
+    columns: list[str],
+    title: str,
+    y_title: str,
+    colors: dict[str, str] | None = None,
+) -> alt.Chart:
     data = _daily_frame(frame, columns)
     if data.empty:
         return (
@@ -239,13 +251,25 @@ def line_chart(frame: pd.DataFrame, columns: list[str], title: str, y_title: str
             .encode(x="Hari:N", y=_value_y_encoding(y_title, columns))
             .properties(title=title, height=360)
         )
+    color = alt.Color("Metric:N", title=None, legend=alt.Legend(orient="top"))
+    if colors:
+        present = [column for column in columns if column in set(data["Metric"])]
+        color = alt.Color(
+            "Metric:N",
+            title=None,
+            scale=alt.Scale(
+                domain=present,
+                range=[colors.get(column, "#334155") for column in present],
+            ),
+            legend=alt.Legend(orient="top"),
+        )
     return (
         alt.Chart(data)
-        .mark_line(point=True)
+        .mark_line(point=True, strokeWidth=2.5 if colors else 2)
         .encode(
             x=_date_x_encoding(data),
             y=_value_y_encoding(y_title, columns, values=data["Value"]),
-            color=alt.Color("Metric:N", title=None, legend=alt.Legend(orient="top")),
+            color=color,
             tooltip=[
                 alt.Tooltip("Tanggal:T", title="Tanggal", format="%d %b %Y"),
                 alt.Tooltip("Metric:N", title=""),

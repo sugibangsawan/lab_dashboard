@@ -57,8 +57,10 @@ def render_overview(frame: pd.DataFrame, ponds: list[str], farm: str = "D") -> N
             )
 
     st.subheader("Perbandingan antar kolam")
-    show_chart(comparison_chart(frame, "NH4", ponds))
-    show_chart(comparison_chart(frame, "NO2", ponds))
+    show_chart(comparison_chart(frame, "NH4", ponds, value_format=",.3f"))
+    show_chart(comparison_chart(frame, "NH3", ponds, value_format=",.3f"))
+    show_chart(comparison_chart(frame, "NO2", ponds, value_format=",.3f"))
+    show_chart(comparison_chart(frame, "PO4", ponds, value_format=",.3f"))
     show_chart(comparison_chart(frame, "Vibrio Hijau", ponds))
     show_chart(comparison_chart(frame, "Vibrio Kuning", ponds))
 
@@ -94,7 +96,15 @@ def render_pond(frame: pd.DataFrame, pond: str, farm: str = "D") -> None:
         show_chart(line_chart(subset, ["pH Pagi", "pH Sore"], "pH pagi & sore", "pH"))
         show_chart(line_chart(subset, ["Salinitas"], "Salinitas", "ppt"))
     show_chart(line_chart(subset, ["TOM"], "TOM", "ppm"))
-    show_chart(line_chart(subset, ["NH4", "NH3", "NO2", "PO4"], "NH4, NH3, NO2, PO4", "ppm"))
+    show_chart(
+        line_chart(
+            subset,
+            ["NH4", "NH3", "NO2", "PO4"],
+            "NH4, NH3, NO2, PO4",
+            "ppm",
+            value_format=",.3f",
+        )
+    )
     vibrio_metrics = ["Vibrio Hijau", "Vibrio Kuning", "Swanella"]
     vibrio_colors = None
     if farm in {"B", "C"}:

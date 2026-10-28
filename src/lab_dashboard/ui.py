@@ -242,6 +242,7 @@ def line_chart(
     title: str,
     y_title: str,
     colors: dict[str, str] | None = None,
+    value_format: str = ",.0f",
 ) -> alt.Chart:
     data = _daily_frame(frame, columns)
     if data.empty:
@@ -273,14 +274,19 @@ def line_chart(
             tooltip=[
                 alt.Tooltip("Tanggal:T", title="Tanggal", format="%d %b %Y"),
                 alt.Tooltip("Metric:N", title=""),
-                alt.Tooltip("Value:Q", title=y_title, format=",.0f"),
+                alt.Tooltip("Value:Q", title=y_title, format=value_format),
             ],
         )
         .properties(title=title, height=360)
     )
 
 
-def comparison_chart(frame: pd.DataFrame, column: str, ponds: list[str]) -> alt.Chart:
+def comparison_chart(
+    frame: pd.DataFrame,
+    column: str,
+    ponds: list[str],
+    value_format: str = ",.0f",
+) -> alt.Chart:
     data = _daily_frame(frame, [column], extra="Kolam")
     data = data.loc[data["Kolam"].isin(ponds)]
     if data.empty:
@@ -309,7 +315,7 @@ def comparison_chart(frame: pd.DataFrame, column: str, ponds: list[str]) -> alt.
             tooltip=[
                 alt.Tooltip("Kolam:N"),
                 alt.Tooltip("Tanggal:T", title="Tanggal", format="%d %b %Y"),
-                alt.Tooltip("Value:Q", title=column, format=",.0f"),
+                alt.Tooltip("Value:Q", title=column, format=value_format),
             ],
         )
         .properties(title=column, height=340)

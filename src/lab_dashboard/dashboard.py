@@ -57,6 +57,9 @@ def render_overview(frame: pd.DataFrame, ponds: list[str], farm: str = "D") -> N
             )
 
     st.subheader("Perbandingan antar kolam")
+    if farm in {"B", "C"}:
+        show_chart(comparison_chart(frame, "Alkalinitas", ponds))
+        show_chart(comparison_chart(frame, "TOM", ponds))
     show_chart(comparison_chart(frame, "NH4", ponds, value_format=",.3f"))
     show_chart(comparison_chart(frame, "NH3", ponds, value_format=",.3f"))
     show_chart(comparison_chart(frame, "NO2", ponds, value_format=",.3f"))
@@ -95,6 +98,7 @@ def render_pond(frame: pd.DataFrame, pond: str, farm: str = "D") -> None:
     if farm not in {"B", "C"}:
         show_chart(line_chart(subset, ["pH Pagi", "pH Sore"], "pH pagi & sore", "pH"))
         show_chart(line_chart(subset, ["Salinitas"], "Salinitas", "ppt"))
+    show_chart(line_chart(subset, ["Alkalinitas"], "Alkalinitas", "ppm"))
     show_chart(line_chart(subset, ["TOM"], "TOM", "ppm"))
     show_chart(
         line_chart(

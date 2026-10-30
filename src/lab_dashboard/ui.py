@@ -137,6 +137,11 @@ def _daily_frame(frame: pd.DataFrame, value_columns: list[str], *, extra: str | 
 PH_METRICS = frozenset({"pH Pagi", "pH Sore"})
 PH_Y_SCALE = alt.Scale(domain=[7, 9], nice=False, zero=False)
 SALINITY_FOCUS = (20, 40)
+# Step and minimum window, in ppm, so small changes are not flattened against zero.
+FOCUS_Y_METRICS = {
+    "Alkalinitas": {"step": 10, "min_span": 40},
+    "TOM": {"step": 5, "min_span": 20},
+}
 
 
 def _salinity_domain(values: pd.Series | None) -> list[int]:
@@ -166,6 +171,29 @@ def _salinity_domain(values: pd.Series | None) -> list[int]:
         else:
             domain_min = domain_max - 2
     return [int(domain_min), int(domain_max)]
+
+
+def _focus_domain(values: pd.Series | None, *, step: float, min_span: float) -> list[float]:
+    """Axis around the plotted range, not from zero, so small changes stay visible."""
+    numbers = (
+        pd.to_numeric(values, errors="coerce").dropna()
+        if values is not None
+        else pd.Series(dtype=float)
+    )
+    if numbers.empty:
+        return [0, min_span]
+    low = float(numbers.min())
+    high = float(numbers.max())
+    span = high - low
+    pad = span * 0.12 if span >= min_span else (min_span - span) / 2
+    domain_min = math.floor((low - pad) / step) * step
+    domain_max = math.ceil((high + pad) / step) * step
+    if domain_max - domain_min < min_span:
+        domain_max = domain_min + min_span
+    if domain_min < 0:
+        domain_max -= domain_min
+        domain_min = 0
+    return [domain_min, domain_max]
 
 
 def _date_ticks(data: pd.DataFrame, max_labels: int = 12) -> list[str]:
@@ -219,6 +247,18 @@ def _value_y_encoding(
             title=title,
             scale=alt.Scale(domain=_salinity_domain(values), nice=False, zero=False),
             axis=alt.Axis(format="d", tickMinStep=1),
+        )
+    if len(metrics) == 1 and metrics[0] in FOCUS_Y_METRICS:
+        spec = FOCUS_Y_METRICS[metrics[0]]
+        return alt.Y(
+            "Value:Q",
+            title=title,
+            scale=alt.Scale(
+                domain=_focus_domain(values, step=spec["step"], min_span=spec["min_span"]),
+                nice=False,
+                zero=False,
+            ),
+            axis=alt.Axis(format=",.0f"),
         )
     if metrics and set(metrics) <= PH_METRICS:
         return alt.Y("Value:Q", title=title, scale=PH_Y_SCALE)
